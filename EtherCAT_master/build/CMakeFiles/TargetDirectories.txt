@@ -1,3 +1,0 @@
-/home/EtherCAT_master/build/CMakeFiles/EtherCAT_Master.dir
-/home/EtherCAT_master/build/CMakeFiles/edit_cache.dir
-/home/EtherCAT_master/build/CMakeFiles/rebuild_cache.dir

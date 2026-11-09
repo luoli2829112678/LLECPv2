@@ -16,3 +16,4 @@ add_executable(LLECP main.cpp) # 将 main.cpp 编译为 LLECP 可执行程序
 target_link_libraries(LLECP PRIVATE EtherCAT_Master) # 链接主站库，同时继承它公开的头文件目录
 
 set_target_properties(LLECP PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin") # 指定可执行程序输出目录
+set_target_properties(LLECP PROPERTIES RUNTIME_OUTPUT_DIRECTORY "/usr/local/bin/HRPC") # 将可执行程序生成到 Ubuntu 本地 HRPC 目录

@@ -1,0 +1,18 @@
+# ninja log v5
+0	7	0	/home/EtherCAT_master/build/CMakeFiles/cmake.verify_globs	550f4d5750daf2ef
+3	124	1794244999812090577	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_print.c.o	15014e758eee7585
+0	247	1794244999934804746	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_base.c.o	4c3dcd1901d012d0
+1	345	1794245000032530089	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_dc.c.o	6c9ecf42c2fe6e09
+126	358	1794245000045530798	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_soe.c.o	d6affc4aef79cc62
+247	399	1794245000086675468	CMakeFiles/EtherCAT_Master.dir/SOEM/osal/linux/osal.c.o	193195250dbce47d
+1	412	1794245000099780626	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_foe.c.o	72c26404f4d7474
+1	425	1794245000112456963	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_eoe.c.o	73f06805a3822ced
+345	472	1794245000160333509	CMakeFiles/EtherCAT_Master.dir/SOEM/oshw/linux/oshw.c.o	c3e5c85889bdfd41
+0	598	1794245000285758279	CMakeFiles/EtherCAT_Master.dir/EtherCAT_Master.cpp.o	1b2cd488a2c3ca27
+358	712	1794245000400440041	CMakeFiles/EtherCAT_Master.dir/SOEM/oshw/linux/nicdrv.c.o	c83e1bf41d16524d
+0	900	1794245000588042339	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_coe.c.o	dd20c90486fca25d
+2	972	1794245000659425158	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_main.c.o	bd539d0bb2c0b7fe
+1	1173	1794245000860703116	CMakeFiles/EtherCAT_Master.dir/SOEM/src/ec_config.c.o	d08e52d0c0376af6
+1173	1305	1794245000991582413	libEtherCAT_Master.so	de3fe7eccfc27967
+1	7	0	/home/EtherCAT_master/build/CMakeFiles/cmake.verify_globs	550f4d5750daf2ef
+0	7	0	/home/EtherCAT_master/build/CMakeFiles/cmake.verify_globs	550f4d5750daf2ef

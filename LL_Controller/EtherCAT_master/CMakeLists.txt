@@ -80,10 +80,12 @@ target_link_options(EtherCAT_Master PRIVATE "-Wl,--no-undefined") # 链接时检
 
 # 无需网卡或 root 权限：测试程序用模拟后端替换 SOEM 的网络函数。
 if(BUILD_TESTING)
-    add_executable(master_tests EtherCAT_Master.cpp tests/master_tests.cpp)
+    add_executable(master_tests EtherCAT_Master.cpp tests/master_tests.cpp ../Bus/LL_EtherCATMaster.cpp)
     target_compile_features(master_tests PRIVATE cxx_std_17)
     target_include_directories(master_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../Bus"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../LL_Public/include"
         "${SOEM_DIR}/include"
         "${CMAKE_CURRENT_BINARY_DIR}/generated/include"
         "${SOEM_DIR}/osal" "${SOEM_DIR}/osal/linux" "${SOEM_DIR}/oshw/linux"

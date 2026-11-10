@@ -4,4 +4,8 @@ target_include_directories(LL_Protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inclu
 target_compile_features(LL_Protocol PUBLIC cxx_std_17)
 add_library(LL_Public INTERFACE)
 target_include_directories(LL_Public INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(LL_Public INTERFACE LL_Protocol ESI_Parse)
+target_link_libraries(LL_Public INTERFACE LL_Protocol ESI_Parse LL_CpsData)
+
+add_library(LL_CpsData STATIC src/LL_CpsProtocol.cpp src/LL_CpsData.cpp src/LL_Pdo.cpp)
+target_include_directories(LL_CpsData PUBLIC include third_party)
+target_link_libraries(LL_CpsData PUBLIC ESI_Parse)

@@ -1,5 +1,7 @@
 #include "LL_CommandCodec.h"
 #include "LL_MasterRegistry.h"
+#include "LL_PdoAssignment.h"
+#include <cstring>
 #include <atomic>
 #include <future>
 #include <iostream>
@@ -30,8 +32,69 @@ private:
     LL::MasterConfig config_;
     std::atomic<bool> running{false};
 };
+class AssignmentMaster:public FakeMaster {
+public:
+    AssignmentMaster():FakeMaster({"fixed",LL::BusType::EtherCAT,"test",1000}){}
+    std::vector<std::uint16_t> pdos{0x1600};
+    bool fixed=true,readable=true,ignoreWrites=false;
+    int writes=0;
+    int countSize=1;
+    int indexSize=2;
+    bool requireInt32=false;
+    struct Write {std::uint16_t object;std::uint8_t sub;int width;std::uint32_t value;};
+    std::vector<Write> accepted;
+    int ReadSDO(std::uint16_t,std::uint16_t,std::uint8_t sub,void* data,int& size,bool,int) override {
+        if(!readable)return -1;
+        if(sub==0){if(size<countSize)return -1;std::memset(data,0,countSize);*static_cast<std::uint8_t*>(data)=static_cast<std::uint8_t>(pdos.size());size=countSize;return 1;}
+        if(sub>pdos.size()||size<indexSize)return -1;
+        auto* bytes=static_cast<std::uint8_t*>(data);std::memset(bytes,0,indexSize);bytes[0]=pdos[sub-1]&255;bytes[1]=pdos[sub-1]>>8;size=indexSize;return 1;
+    }
+    int WriteSDO(std::uint16_t,std::uint16_t object,std::uint8_t sub,const void* data,int width,bool,int) override {
+        ++writes;if(fixed||(requireInt32&&width!=4))return -1;
+        const auto* bytes=static_cast<const std::uint8_t*>(data);
+        std::uint32_t value=0;for(int i=0;i<width;++i)value|=static_cast<std::uint32_t>(bytes[i])<<(i*8);
+        accepted.push_back({object,sub,width,value});
+        if(ignoreWrites)return 1;
+        if(sub==0)pdos.resize(bytes[0]);
+        else {if(pdos.size()<sub)pdos.resize(sub);pdos[sub-1]=bytes[0]|(bytes[1]<<8);}
+        return 1;
+    }
+};
 }
 int main(){try{
+    AssignmentMaster assignment;
+    LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1600});
+    check(assignment.writes==0,"unchanged fixed assignment must not be written");
+    for(const int width:{2,4}){assignment.countSize=width;LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1600});}
+    check(assignment.writes==0,"padded count must not cause a fixed assignment write");
+    assignment.indexSize=4;LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1600});
+    check(assignment.writes==0,"padded PDO index must not cause a fixed assignment write");
+    bool rejected=false;
+    try{LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1601});}catch(const std::exception& e){rejected=std::string(e.what()).find("slave 1")!=std::string::npos;}
+    check(rejected,"different fixed assignment must fail with slave diagnostics");
+    assignment.fixed=false;
+    LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1601,0x1602});
+    check(assignment.pdos==std::vector<std::uint16_t>({0x1601,0x1602}),"configurable assignment not applied");
+    assignment.ignoreWrites=true;rejected=false;
+    try{LL::EnsurePdoAssignment(assignment,1,0x1c12,{0x1600});}catch(...){rejected=true;}
+    check(rejected,"ignored assignment writes must not report success");
+    assignment.ignoreWrites=false;
+    LL::EnsurePdoAssignment(assignment,1,0x1c12,{});
+    check(assignment.pdos.empty(),"empty selection must clear assignment");
+    AssignmentMaster legacy;legacy.fixed=false;legacy.readable=false;legacy.requireInt32=true;
+    LL::EnsurePdoAssignment(legacy,1,0x1c12,{0x1600},true,false);
+    LL::EnsurePdoAssignment(legacy,1,0x1c13,{0x1a00},true,false);
+    check(legacy.accepted.size()==6,"legacy initialization did not write both assignments");
+    for(std::size_t i=0;i<6;++i){
+        const auto& write=legacy.accepted[i];
+        check(write.object==(i<3?0x1c12:0x1c13)&&write.width==4,"legacy assignment object/INT32 width differs from reference");
+        const auto step=i%3;
+        check(write.sub==(step==1?1:0)&&write.value==(step==0?0:step==2?1:i<3?0x1600:0x1a00),"legacy clear/index/count sequence differs from reference");
+    }
+    AssignmentMaster reinitialize;reinitialize.fixed=false;
+    LL::EnsurePdoAssignment(reinitialize,1,0x1c12,{0x1600},true);
+    check(reinitialize.accepted.size()==3,"startup skipped initialization because assignment already matched");
+    check(reinitialize.accepted[0].width==1&&reinitialize.accepted[1].width==2,"standard PDO assignment widths changed");
     LL::FrameBuffer buffer;std::vector<std::string> frames;LL::Command command;
     check(buffer.Append("RegistrationMas",frames)&&frames.empty(),"partial packet dispatched");
     check(buffer.Append("ter,m1,EtherCAT,eth0,1000,;ListMasters,;",frames)&&frames.size()==2,"fragment/pipeline framing failed");

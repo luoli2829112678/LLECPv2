@@ -1,4 +1,5 @@
 #include "LLC_Rbt.h"
+#include "LL_CpsService.h"
 #include "LLC_CmdMsg.h"
 #include "LL_Process.h"
 #include <filesystem>
@@ -7,6 +8,9 @@
 #include <limits>
 #include <new>
 #include <sys/file.h>
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 namespace {
 unsigned number(const std::string& text, unsigned maximum=std::numeric_limits<unsigned>::max()) {
     unsigned value=0;
@@ -21,12 +25,34 @@ std::string busName(LL::BusType type){
 }
 bool LLC_Rbt::InitializeController(const std::string& runtimeRoot) {
     if(m_initialized)return true;
-    m_processLock=open("/tmp/llecp-controller.lock",O_CREAT|O_RDWR,0600);
-    if(m_processLock<0||flock(m_processLock,LOCK_EX|LOCK_NB)!=0){if(m_processLock>=0)close(m_processLock);m_processLock=-1;return false;}
+    // Keep one controller per host; compiler subprocesses must not inherit its lock.
+    constexpr const char* lockPath="/tmp/llecp-controller.lock";
+    m_processLock=open(lockPath,O_CREAT|O_RDWR|O_CLOEXEC,0600);
+    if(m_processLock<0) {
+        std::cerr<<"[LL_Controller] Cannot open process lock "<<lockPath<<": "<<std::strerror(errno)<<'\n';
+        return false;
+    }
+    if(flock(m_processLock,LOCK_EX|LOCK_NB)!=0) {
+        const int error=errno;
+        if(error==EWOULDBLOCK||error==EAGAIN) {
+            char owner[32]{};
+            const auto size=pread(m_processLock,owner,sizeof(owner)-1,0);
+            std::cerr<<"[LL_Controller] Another controller is already running";
+            if(size>0)std::cerr<<" (lock owner PID "<<std::string(owner,static_cast<std::size_t>(size))<<')';
+            std::cerr<<". Stop the existing instance before starting another.\n"
+                     <<"Inspect it with: fuser -v "<<lockPath<<'\n';
+        } else {
+            std::cerr<<"[LL_Controller] Cannot acquire process lock "<<lockPath<<": "<<std::strerror(error)<<'\n';
+        }
+        close(m_processLock);m_processLock=-1;return false;
+    }
+    const auto owner=std::to_string(getpid());
+    if(ftruncate(m_processLock,0)!=0||pwrite(m_processLock,owner.data(),owner.size(),0)!=static_cast<ssize_t>(owner.size()))
+        std::cerr<<"[LL_Controller] Cannot record lock owner PID: "<<std::strerror(errno)<<'\n';
     m_runtimeRoot=runtimeRoot;m_sApplicationPath=(std::filesystem::path(runtimeRoot)/"Application").string();
     for(const auto* sub:{"ESI","Application","logs","dumpInfo"})std::filesystem::create_directories(std::filesystem::path(runtimeRoot)/sub);
     Logger::instance().init((std::filesystem::path(runtimeRoot)/"logs").string());
-    if(Initialize_LLCShm()!=REC_Successed)return false;
+    if(Initialize_LLCShm()!=REC_Successed){std::cerr<<"[LL_Controller] Shared memory initialization failed: "<<std::strerror(errno)<<'\n';ShutdownController();return false;}
     ResetControllerConfig();
     Initialize_ESI();
     m_stRbtEtherCATParams.bSimulationType=false;
@@ -34,10 +60,10 @@ bool LLC_Rbt::InitializeController(const std::string& runtimeRoot) {
     Initialize_LLCStatus();
     llsm_event event{};event.type=Cmd_Msg;event.cmd=Cmd_UnInitialized;
     FSM_handleEvent(nullptr,&event);
-    if(HSTR_Init()!=0){ShutdownController();return false;}
-    if(Initialize_LLCIF(m_pLLC_DispatchCmdFunc)!=REC_Successed){ShutdownController();return false;}
+    if(HSTR_Init()!=0){std::cerr<<"[LL_Controller] HSTR initialization failed\n";ShutdownController();return false;}
+    if(Initialize_LLCIF(m_pLLC_DispatchCmdFunc)!=REC_Successed){std::cerr<<"[LL_Controller] Command listener initialization failed\n";ShutdownController();return false;}
     m_initialized=true;
-    if(Initialize_LLCThreads()!=REC_Successed){ShutdownController();return false;}
+    if(Initialize_LLCThreads()!=REC_Successed){std::cerr<<"[LL_Controller] Controller thread initialization failed\n";ShutdownController();return false;}
     return true;
 }
 void LLC_Rbt::ShutdownController() {
@@ -51,6 +77,7 @@ void LLC_Rbt::ShutdownController() {
     m_masters.CloseAll();
     m_CPSClient.Shutdown();
     if(m_pLLC_ShmRW){munmap(m_pLLC_ShmRW,sizeof(ST_ShareMemory));m_pLLC_ShmRW=nullptr;m_pLLC_CPS2LLCMemory=nullptr;m_pLLC_LLC2CPSMemory=nullptr;}
+    LL_CpsService::Get().Shutdown();
     m_initialized=false;m_bMasterState=false;
     Logger::instance().shutdown();
     if(m_processLock>=0){close(m_processLock);m_processLock=-1;}
@@ -146,6 +173,7 @@ bool LLC_Rbt::ConnectActiveMaster() {
     return master->Start(false);
 }
 bool LLC_Rbt::AreSlavesConnected() {
+    if(LL_CpsService::Get().Attached())return LL_CpsService::Get().Connected();
     if(m_stRbtEtherCATParams.bSimulationType||m_bFoEWorking)return true;
     auto master=m_masters.Get(m_activeMaster);
     return master && master->Status().connected;
@@ -186,7 +214,8 @@ void LLC_Rbt::ControllerCycle() {
                         if(progress.totalBytes)m_dFOEworkProgress=100.0*progress.transferredBytes/progress.totalBytes;
                     }
                 }
-                if(master&&!m_bFoEWorking&&!m_stRbtEtherCATParams.bSimulationType) {
+                LL_CpsService::Get().BeforeCycle();
+                if(!LL_CpsService::Get().Attached()&&master&&!m_bFoEWorking&&!m_stRbtEtherCATParams.bSimulationType) {
                     if(m_bMasterState)master->Exchange();
                     if(now>=nextPoll){master->Poll();nextPoll=now+std::chrono::milliseconds(100);}
                     const auto status=master->Status();
@@ -203,6 +232,7 @@ void LLC_Rbt::ControllerCycle() {
                 if(m_fsmRbt.currentState)StatusCheck();
                 LLC_ExecHandleNotRealTimeCmd();
                 HandleCyclicJob(static_cast<long>(std::chrono::duration_cast<std::chrono::microseconds>(now-last).count()));
+                LL_CpsService::Get().AfterCycle();
             }
             last=now;next+=period;
             if(next<Clock::now())next=Clock::now()+period;

@@ -1,4 +1,6 @@
 #include "LLC_Rbt.h"
+#include "LL_CpsService.h"
+#include "LL_CpsData.h"
 #include "LLC_IF.h"
 
 #include <unistd.h>
@@ -51,9 +53,10 @@ int LLC_Rbt::Initialize_LLCIF(LLC_HandlecmdCBFunc pLLC_DispatchCmdFunc)
     //初始化Socket侦听
     for (auto& it : m_IFHandleMap)
     {
-        if(0 != LLNet_Listen(it.first, &(it.second)))  //只在此IP侦听
+        const int listenResult=LLNet_Listen(it.first, &(it.second));
+        if(listenResult != 0)  //只在此IP侦听
         {
-            int nErr=errno;
+            int nErr=listenResult;
             printf("listen IF protocol %d port error:%d, %s\n", it.first, nErr, strerror(nErr));
             return nErr;
         }
@@ -63,9 +66,10 @@ int LLC_Rbt::Initialize_LLCIF(LLC_HandlecmdCBFunc pLLC_DispatchCmdFunc)
     LLC_DataSheetSrv dataSheet;
     int nCT = 1000;  //1ms发送一次
     dataSheet.SetSrv(nCT, false);
-    if(0 != LLNet_Listen(PORT_RTDATARPT, &dataSheet))
+    const int listenResult=LLNet_Listen(PORT_RTDATARPT, &dataSheet);
+    if(listenResult != 0)
     {
-        int nErr=errno;
+        int nErr=listenResult;
         printf("listen LL protocol %d port error:%d, %s\n", PORT_RTDATARPT, nErr, strerror(nErr));
         return nErr;
     }
@@ -77,7 +81,9 @@ int LLC_Rbt::Initialize_LLCIF(LLC_HandlecmdCBFunc pLLC_DispatchCmdFunc)
 int LLC_Rbt::Initialize_ESI()
 {
      namespace fs = std::filesystem;              // 文件系统命名空间别名
-    const fs::path directoryPath = fs::path(m_runtimeRoot) / "ESI"; // ESI文件目录
+    const fs::path directoryPath = LL::CpsDataRoot() / "ESI"; // ESI文件目录
+    fs::create_directories(directoryPath);
+    if(!m_vSlaves.empty())for(auto& parser:m_vESI_Parse)m_retiredESI.push_back(std::move(parser));
     m_vESI_Parse.clear();                       
     std::vector<fs::path> xmlFiles;              // 保存找到的XML文件路径
     try
@@ -728,7 +734,7 @@ bool LLC_Rbt::CheckSlaveDropError()
 
 bool LLC_Rbt::CheckEmergencyStop()
 {
-    return  enum_StatusHigh == m_pLLC_CPS2LLCMemory->st_BoxInfo.nIsEStop;
+    return LL_CpsService::Get().Emergency() || enum_StatusHigh == m_pLLC_CPS2LLCMemory->st_BoxInfo.nIsEStop;
 }
 bool LLC_Rbt::CheckIsEmergencyStopHandled()
 {
@@ -907,10 +913,11 @@ bool LLC_Rbt::IsSlaveInOprational()
 
 //掉线后清除配置
 int LLC_Rbt::CleanSlaveConfig() {
+    LL_CpsService::Get().InvalidateAxes();
     LLCSoftMotion.RegisterAxis({}); LLCSoftMotion.RegisterAxisGroup({});
     m_vAxis.clear(); m_vIOs.clear(); m_vAxisGruop.clear();
     for (auto* slave : m_vSlaves) delete slave;
-    m_vSlaves.clear(); m_nConfiguredSlaveNum=0; m_nConfiguredAxisNum=0;
+    m_vSlaves.clear();m_retiredESI.clear(); m_nConfiguredSlaveNum=0; m_nConfiguredAxisNum=0;
     return REC_Successed;
 }
 int LLC_Rbt::CleanAxisConfig()

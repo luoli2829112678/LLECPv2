@@ -79,6 +79,8 @@ void MC_PowerOn::Execute()
             {
                 m_pCIA402Axis->Axis_InitAlign();
                 //检测轴是否为去使能状态（错误或运动等状态禁用）
+                if(m_pCIA402Axis->Axis_ReadAxisState()==motionState_standstill&&!m_pCIA402Axis->Axis_GetVirtualState()&&(nStatusWord&0x6f)!=0x27)
+                    m_pCIA402Axis->Axis_SetAxisState(motionState_power_off);
                 if(motionState_power_off != m_pCIA402Axis->Axis_ReadAxisState())
                 {
                     //此状态不允许使能，也不切状态机，功能块置为error

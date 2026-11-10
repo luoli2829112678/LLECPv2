@@ -27,6 +27,7 @@ class AxisGroup;
 
 class CIA402Axis 
 {
+    friend class LL_CpsService;
     AXIS_FRIEND_CLASSES
     friend SoftMotion;
     friend AxisGroup;

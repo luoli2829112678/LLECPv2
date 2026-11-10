@@ -22,20 +22,26 @@
       ]
     },
     {
-      "name": "调试 LL_CPS",
+      "name": "调试 LL_CPS (Linux)",
       "type": "cppdbg",
       "request": "launch",
       "program": "/usr/local/bin/LLECT/LL_CPS",
-      "args": [
-        "127.0.0.1",
-        "8888",
-        "ListMasters"
-      ],
+      "args": [],
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
       "preLaunchTask": "编译 LL_CPS",
       "externalConsole": false
+    },
+    {
+      "name": "调试 LL_CPS (Windows / Visual Studio)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/windows-vs/bin/DEBUG/LL_CPS.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/windows-vs/bin/DEBUG",
+      "preLaunchTask": "编译 LL_CPS",
+      "console": "internalConsole"
     }
   ]
 }

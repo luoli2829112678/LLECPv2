@@ -8,31 +8,37 @@
 | --- | --- |
 | `LL_Public` | 指令名称、端口、公共结构体、状态码、主站协议契约、文本协议编解码、cJSON 和 `ESI_Parse` |
 | `LL_Controller` | `LLC_Rbt` 核心、原状态机及动作、轴/IO/点位接口、HSTR、LLSMC、从站、EtherCAT 主站及注册表 |
-| `LL_CPS` | 简单的命令行上位机入口，与控制器使用同一套公共指令定义 |
+| `LL_CPS` | EUI-NEO 图形工程站：项目、EtherCAT、HSTR 编辑与调试、UDP 示波器，支持 Windows / Linux |
 
-默认只生成两个应用：`/usr/local/bin/LLECT/LL_Controller`、`/usr/local/bin/LLECT/LL_CPS`。动态库和静态库也统一生成到 `/usr/local/bin/LLECT`，程序通过 `$ORIGIN` 查找同目录动态库，避开 `/mnt` 的挂载执行限制。中间文件仍放在 `build`。
+生产程序为 `LL_Controller` 和 `LL_CPS`。Linux 服务器默认仅构建控制器，图形端需显式开启 `-DLLECP_BUILD_CPS=ON`；Windows 默认构建 CPS。Linux 程序、动态库和静态库统一生成到 `/usr/local/bin/LLECT`，程序通过 `$ORIGIN` 查找同目录动态库，避开 `/mnt` 的挂载执行限制。
 
 在 Linux 上，需要 CMake 3.20+、C/C++17 编译器、Python 3 和 pthread；SOEM 使用 Linux RAW 网卡后端。HSTR 已内嵌 ST 编译器和已生成的解析器文件，通常无需另装 Bison/Flex。
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
+cmake -S . -B /usr/local/bin/LLECT/build/linux -DCMAKE_BUILD_TYPE=Debug -DLLECP_BUILD_CPS=OFF
+cmake --build /usr/local/bin/LLECT/build/linux --parallel
 /usr/local/bin/LLECT/LL_Controller /usr/local/bin/LLECT/runtime
 ```
 
 默认输出目录需要当前编译用户有写权限；可使用 `-DLLECP_OUTPUT_DIRECTORY=其他目录` 覆盖。修改输出位置后，需要重新执行 CMake 配置和编译。
 
-控制器启动通信和 HSTR，不自动打开或启动任何总线。`runtime/ESI` 存放设备 ESI XML，`runtime/Application` 存放 HSTR 应用，`runtime/logs` 存放日志。访问 EtherCAT 网卡需要相应 RAW 网络权限。
+控制器启动通信和 HSTR，不自动打开或启动任何总线。`/usr/local/ect/LLECP/ESI` 存放设备 ESI XML，`runtime/Application` 存放 HSTR 应用，`runtime/logs` 存放日志。访问 EtherCAT 网卡需要相应 RAW 网络权限。
 
 VS Code 提供两个独立的编译/调试入口、编译全部和测试任务；按 F5 时选择 `调试 LL_Controller` 或 `调试 LL_CPS`。这些配置用于 Linux 或远程 Linux 工作区。
+
+## 图形工程站
+
+Windows / Visual Studio 与 Linux / CMake 的完整构建、目录及使用说明见 [LL_CPS/README.md](LL_CPS/README.md)。Windows 可运行 `LL_CPS/GenerateVisualStudio.ps1 -Build`；默认只构建 CPS。Linux 图形端需要 X11 / OpenGL 开发包，输出仍为 `/usr/local/bin/LLECT`。
+
+下列旧命令示例使用可选的 `LL_CpsCli` 调试工具，通过 `-DLLECP_BUILD_CLI=ON` 开启。默认的 `LL_CPS` 已是图形程序。
 
 ## 注册主站
 
 启动主站之前必须注册。第一个注册主站自动成为旧控制接口所使用的当前主站。
 
 ```sh
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 RegistrationMaster m1 EtherCAT enp2s0 1000
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 ListMasters
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 RegistrationMaster m1 EtherCAT enp2s0 1000
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 ListMasters
 ```
 
 `RegistrationMaster` 参数顺序：主站 ID、协议类型、网卡/端点、周期微秒。周期范围为 100..1000000 us，同一 EtherCAT 网卡不能重复注册。注册只创建后端对象，不访问硬件。未注册或未提供工厂的协议会明确返回失败。
@@ -42,11 +48,11 @@ VS Code 提供两个独立的编译/调试入口、编译全部和测试任务�
 ### 多主站
 
 ```sh
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 RegistrationMaster m2 EtherCAT enp3s0 1000
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 StartRegisteredMaster m1
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 StartRegisteredMaster m2
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 ReadMasterStatus m2
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8888 StopRegisteredMaster m2
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 RegistrationMaster m2 EtherCAT enp3s0 1000
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 StartRegisteredMaster m1
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 StartRegisteredMaster m2
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 ReadMasterStatus m2
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8888 StopRegisteredMaster m2
 ```
 
 每个主站有独立上下文、PDO 缓冲区、状态和文件传输进度。当前主站由控制器周期统一调度；其他主站使用自己的周期线程。停止、升级或关闭一个主站不会关闭其他主站。
@@ -113,7 +119,7 @@ SetSlaveState,m1,1,4,;
 HSTR 是唯一编程执行对象，保留应用/文件/任务管理、编译、运行/停止/复位、变量读写、断点、单步及任务统计接口。硬件接口清单位于 `LL_Controller/HSTR/interfaces/llpc.json`，适配器自动生成。旧执行引擎的类、回调、指令、状态字段和端口均已移除。
 
 ```sh
-/usr/local/bin/LLECT/LL_CPS 127.0.0.1 8890 HSTR_CreateApplication sample
+/usr/local/bin/LLECT/LL_CpsCli 127.0.0.1 8890 HSTR_CreateApplication sample
 ```
 
 FOE 读写在独立任务中执行，停止当前主站周期和当前 HSTR 应用后传输，可继续查询进度。其他主站继续运行。BOOT 传输结束后返回 INIT，并要求重新扫描/映射；不自动重启设备或重新运行应用。

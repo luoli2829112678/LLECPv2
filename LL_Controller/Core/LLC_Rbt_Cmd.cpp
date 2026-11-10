@@ -1,5 +1,6 @@
 
 #include "LLC_Rbt.h"
+#include "LL_CpsService.h"
 #include "LLC_IF.h"
 #include "LL_netplan.h"
 #include "LLC_CmdMsg.h"
@@ -55,6 +56,8 @@ int LLC_Rbt::DispatchCmdFunc(int s,const string&strCmd,const vector<string>&para
 {
     std::lock_guard<std::recursive_mutex> lock(m_controllerMutex);
     results.clear();
+    if(nPort==PORT_NORMALCMD && strCmd==LL::CpsCommand){results={"0",LL::Encode64(LL_CpsService::Get().Handle(s,params).dump())};return REC_Successed;}
+    if(LL_CpsService::Get().IsBuilding()){results={std::to_string(REC_TimeOutError),"CPS build in progress"};return REC_TimeOutError;}
     if (nPort == PORT_NORMALCMD && HandleMasterCommand(strCmd, params, results)) return REC_Successed;
     if (nPort == PORT_NORMALCMD)
     {

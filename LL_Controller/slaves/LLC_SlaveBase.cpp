@@ -1,5 +1,6 @@
 #include"LLC_SlaveBase.h"
 #include <limits>
+#include <cstdio>
 
 #define FALSE               0
 #define LLC_TIMEOUTSAFE     700000//20000
@@ -153,6 +154,9 @@ int LLC_SlaveBase::InitPDOOffset()
             nTxBitOffset += static_cast<uint32_t>(stEntry.bitLen);
         }
     }
+    std::printf("[PDO] slave %d offsets initialized: Rx %u bits/start %u, Tx %u bits/start %u\n",
+                m_nSlaveID,static_cast<unsigned>(m_pSlaves->Obits),static_cast<unsigned>(m_pSlaves->Ostartbit),
+                static_cast<unsigned>(m_pSlaves->Ibits),static_cast<unsigned>(m_pSlaves->Istartbit));
     return REC_Successed;
 }
 
@@ -245,7 +249,7 @@ std::vector<CIA402Axis*> LLC_SlaveBase::GetCIA402Axis()
             printf("GETAxis--PDO NOT FIND");
             return m_vAxes;
         }
-        ST_SMCInitMap stMap;
+        ST_SMCInitMap stMap{};
         // RxPDO：主站发送给从站
         stMap.pControlword = reinterpret_cast<uint16_t*>(FindPDOAddress(stFindPDO[1], CONTROLWORD_INDEX + nObjectOffset, 0, 16));
         stMap.pTargetPosition = reinterpret_cast<int32_t*>(FindPDOAddress(stFindPDO[1], TARGET_POSITION_INDEX + nObjectOffset, 0, 32));
@@ -270,8 +274,31 @@ std::vector<CIA402Axis*> LLC_SlaveBase::GetCIA402Axis()
         // 非标准CiA 402对象，暂时不自动映射
         stMap.pJointActPosition = nullptr;
 
+        if(nSlot<axisOverrides.size()){
+            const auto& mapping=axisOverrides[nSlot].at("mapping");
+            auto resolve=[&](const char* key,bool rx,int bits)->uint8_t*{
+                if(!mapping.contains(key)||mapping[key].is_null())return nullptr;
+                const auto& m=mapping[key];for(const auto& p:rx?m_vRxPDOs:m_vTxPDOs){
+                    if(p.index!=m.at("pdo").get<int>())continue;
+                    return FindPDOAddress(p,m.at("index").get<int>(),m.at("subIndex").get<int>(),bits);
+                }return nullptr;
+            };
+            stMap.pControlword=reinterpret_cast<uint16_t*>(resolve("Controlword",true,16));
+            stMap.pStatusWord=reinterpret_cast<uint16_t*>(resolve("StatusWord",false,16));
+            stMap.pErrorCode=reinterpret_cast<uint16_t*>(resolve("ErrorCode",false,16));
+            stMap.pTargetPosition=reinterpret_cast<int32_t*>(resolve("TargetPosition",true,32));
+            stMap.pActualPosition=reinterpret_cast<int32_t*>(resolve("ActualPosition",false,32));
+            stMap.pTargetVelocity=reinterpret_cast<int32_t*>(resolve("TargetVelocity",true,32));
+            stMap.pActualVelocity=reinterpret_cast<int32_t*>(resolve("ActualVelocity",false,32));
+            stMap.pTargetTorque=reinterpret_cast<int16_t*>(resolve("TargetTorque",true,16));
+            stMap.pActualTorque=reinterpret_cast<int16_t*>(resolve("ActualTorque",false,16));
+            stMap.pTargetModesOfOperation=reinterpret_cast<uint8_t*>(resolve("TargetModesOfOperation",true,8));
+            stMap.pActualModesOfOperation=reinterpret_cast<uint8_t*>(resolve("ActualModesOfOperation",false,8));
+            stMap.pDigitalInputs=reinterpret_cast<uint32_t*>(resolve("DigitalInputs",false,32));
+            stMap.pDigitalOutputs=reinterpret_cast<uint32_t*>(resolve("DigitalOutputs",true,32));
+        }
         // 控制字和状态字必须同时存在
-        if (stMap.pControlword == nullptr || stMap.pStatusWord == nullptr)
+        if (!m_bVirtual && (stMap.pControlword == nullptr || stMap.pStatusWord == nullptr))
         {
             // 配置要求生成轴，但PDO中缺少必要对象
             // 不修改预先配置好的m_nAxisSlot

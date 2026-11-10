@@ -9,11 +9,24 @@
         "-S",
         "${workspaceFolder}",
         "-B",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "-DCMAKE_BUILD_TYPE=Debug",
-        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT"
+        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT",
+        "-DLLECP_BUILD_CONTROLLER=ON",
+        "-DLLECP_BUILD_CPS=OFF",
+        "-DBUILD_TESTING=ON"
       ],
-      "problemMatcher": []
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/LL_CPS/GenerateVisualStudio.ps1"
+        ]
+      }
     },
     {
       "label": "编译全部",
@@ -21,10 +34,9 @@
       "command": "cmake",
       "args": [
         "--build",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "--target",
         "LL_Controller",
-        "LL_CPS",
         "--parallel"
       ],
       "dependsOn": "配置 LLECP",
@@ -34,7 +46,21 @@
       "group": {
         "kind": "build",
         "isDefault": true
-      }
+      },
+      "windows": {
+        "command": "cmake",
+        "args": [
+          "--build",
+          "${workspaceFolder}/build/windows-vs",
+          "--config",
+          "Debug",
+          "--parallel"
+        ],
+        "problemMatcher": [
+          "$msCompile"
+        ]
+      },
+      "detail": "Linux 服务器编译控制器；Windows 编译 CPS。"
     },
     {
       "label": "编译 LL_Controller",
@@ -42,7 +68,7 @@
       "command": "cmake",
       "args": [
         "--build",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "--target",
         "LL_Controller",
         "--parallel"
@@ -58,15 +84,28 @@
       "command": "cmake",
       "args": [
         "--build",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux-cps",
         "--target",
         "LL_CPS",
         "--parallel"
       ],
-      "dependsOn": "配置 LLECP",
+      "dependsOn": "配置 CPS",
       "problemMatcher": [
         "$gcc"
-      ]
+      ],
+      "windows": {
+        "command": "cmake",
+        "args": [
+          "--build",
+          "${workspaceFolder}/build/windows-vs",
+          "--config",
+          "Debug",
+          "--parallel"
+        ],
+        "problemMatcher": [
+          "$msCompile"
+        ]
+      }
     },
     {
       "label": "配置测试",
@@ -76,11 +115,23 @@
         "-S",
         "${workspaceFolder}",
         "-B",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "-DBUILD_TESTING=ON",
-        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT"
+        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT",
+        "-DLLECP_BUILD_CONTROLLER=ON",
+        "-DLLECP_BUILD_CPS=OFF"
       ],
-      "problemMatcher": []
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/LL_CPS/GenerateVisualStudio.ps1"
+        ]
+      }
     },
     {
       "label": "编译测试",
@@ -88,17 +139,31 @@
       "command": "cmake",
       "args": [
         "--build",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "--target",
         "master_tests",
         "protocol_registry_tests",
         "controller_network_tests",
+        "cps_network_tests",
         "--parallel"
       ],
       "dependsOn": "配置测试",
       "problemMatcher": [
         "$gcc"
-      ]
+      ],
+      "windows": {
+        "command": "cmake",
+        "args": [
+          "--build",
+          "${workspaceFolder}/build/windows-vs",
+          "--config",
+          "Debug",
+          "--parallel"
+        ],
+        "problemMatcher": [
+          "$msCompile"
+        ]
+      }
     },
     {
       "label": "测试 LLECP",
@@ -106,11 +171,48 @@
       "command": "ctest",
       "args": [
         "--test-dir",
-        "${workspaceFolder}/build",
+        "/usr/local/bin/LLECT/build/linux",
         "--output-on-failure"
       ],
       "dependsOn": "编译测试",
-      "problemMatcher": []
+      "problemMatcher": [],
+      "windows": {
+        "command": "ctest",
+        "args": [
+          "--test-dir",
+          "${workspaceFolder}/build/windows-vs",
+          "-C",
+          "Debug",
+          "--output-on-failure"
+        ]
+      }
+    },
+    {
+      "label": "配置 CPS",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "-S",
+        "${workspaceFolder}",
+        "-B",
+        "/usr/local/bin/LLECT/build/linux-cps",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT",
+        "-DLLECP_BUILD_CONTROLLER=OFF",
+        "-DLLECP_BUILD_CPS=ON",
+        "-DBUILD_TESTING=ON"
+      ],
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/LL_CPS/GenerateVisualStudio.ps1"
+        ]
+      }
     }
   ]
 }

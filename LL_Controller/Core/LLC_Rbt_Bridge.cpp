@@ -1,4 +1,5 @@
 #include "LLC_Rbt.h"
+#include "LL_CpsService.h"
 #include "LLC_Rbt_Bridge.h"
 #include <cmath>
 #include <cstring>
@@ -41,6 +42,7 @@ int LLC_AxisEnable(int axisId)
     // const auto now = std::chrono::system_clock::now();
     // const auto timestampUs = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
     // std::printf("[时间=%lld us] LLC_AxisEnable axisId=%d\n", static_cast<long long>(timestampUs), axisId);
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     std::vector<int> axes{axisId};
     return LLCRbt->AxisEnable(axes);
@@ -48,12 +50,14 @@ int LLC_AxisEnable(int axisId)
 
 int LLC_AxisDisable(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     std::vector<int> axes{axisId};
     return LLCRbt->AxisDisable(axes);
 }
 int LLC_AxisReset(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     std::vector<int> axes{axisId};
     return LLCRbt->AxisReset(axes);
@@ -61,46 +65,54 @@ int LLC_AxisReset(int axisId)
 //轴运动
 int LLC_AxisStop(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     std::vector<int> axes{axisId};
     return LLCRbt->AxisStop(axes);
 }
 int LLC_AxisStartAnalogFocusing(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->StartAnalogFocusing(axisId);
 }
 
 int LLC_AxisStopAnalogFocusing(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->StopAnalogFocusing(axisId);
 }
 
 int LLC_AxisStartPEG(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->StartPEG(axisId);
 }
 
 int LLC_AxisStopPEG(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->StopPEG(axisId);
 }
 
 int LLC_AxisAbsMove(int axisId,double pos,double vel,double acc,double dec,double jerk)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->AxisAbsMove(axisId,pos,vel,acc,dec,jerk);
 }
 int LLC_AxisRelMove(int axisId,double pos,double vel,double acc,double dec,double jerk)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->AxisRelMove(axisId,pos,vel,acc,dec,jerk);
 }
 int LLC_AxisVelocityMove(int axisId,double vel,double acc,double dec,double jerk)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     if (!std::isfinite(vel)) return REC_ParametersError;
     const int direction = static_cast<int>(vel < 0 ? EN_Direction::enNegative : EN_Direction::enPositive);
@@ -108,6 +120,7 @@ int LLC_AxisVelocityMove(int axisId,double vel,double acc,double dec,double jerk
 }
 int LLC_AxisMoveSet(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     std::vector<int> axes{axisId};
     return LLCRbt->SetAxisMove(axes);
@@ -116,6 +129,7 @@ int LLC_AxisMoveSet(int axisId)
 //轴设置
 int LLC_AxisSetMovePos(int axisId,double pos)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->SetAxisMovePos(axisId,pos);
 }
@@ -124,30 +138,35 @@ int LLC_AxisSetMovePos(int axisId,double pos)
 //轴读取
 int LLC_AxisReadState(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->AxisReadState(axisId);
 }
 
 int LLC_AxisSetMoveVel(int axisId, double vel)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->SetAxisMoveVel(axisId, vel);
 }
 
 int LLC_AxisSetMoveAcc(int axisId, double acc)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->SetAxisMoveAcc(axisId, acc);
 }
 
 int LLC_AxisSetMoveDec(int axisId, double dec)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->SetAxisMoveDec(axisId, dec);
 }
 
 int LLC_AxisSetMoveJerk(int axisId, double jerk)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) return REC_ParametersError;
     return LLCRbt->SetAxisMoveJerk(axisId, jerk);
 }
@@ -164,6 +183,7 @@ int LLC_AxisDisableChecked(int axisId)
 }
 double LLC_AxisGetActPos(int axisId)
 {
+    axisId=LL_CpsService::Get().ResolveAxis(axisId);
     if (!ValidAxis(axisId)) throw std::invalid_argument("AXIS_GETACTPOS: invalid axis");
     return LLCRbt->m_vAxis[axisId]->Axis_GetActualPosition();
 }

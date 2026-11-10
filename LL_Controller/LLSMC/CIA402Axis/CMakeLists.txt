@@ -7,6 +7,7 @@ add_library(CIA402Axis SHARED
     CIA402AxisGeneral.cpp
     CIA402AxisDualEncoder.cpp
 )
+target_link_libraries(CIA402Axis PUBLIC Threads::Threads)
 
 target_include_directories(CIA402Axis PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

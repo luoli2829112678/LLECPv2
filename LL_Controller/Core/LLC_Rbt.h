@@ -35,8 +35,10 @@
 #include"IO/LLPC_IO.h"
 
 
+class LL_CpsService;
 class LLC_Rbt : public LLC_Rbt_Status
 {
+friend class LL_CpsService;
 DECLARE_Singleton(LLC_Rbt)
 public:
     LLC_Rbt(LLC_Rbt &&) = delete;
@@ -144,6 +146,7 @@ protected://配置参数
     vector<SlaveInfo> m_vScanSlaveInfo;
     //初始化的设备列表
     vector<std::unique_ptr<ESI_Parse>> m_vESI_Parse;
+    vector<std::unique_ptr<ESI_Parse>> m_retiredESI;
     
 public://实时数据
     ST_RobotControlStatus m_stRobotControlStatus{};

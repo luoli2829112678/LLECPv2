@@ -16,21 +16,17 @@ int LLC_Rbt::AxisInitReset(vector<int>AxisList)
 }
 int LLC_Rbt::AxisEnable(vector<int>AxisList)
 {
-    for(size_t i = 0;i<AxisList.size();i++)
-    {
-        int nAxisID = AxisList[i];
-        if(EN_AxisMotionState::motionState_standstill <= m_vAxis[nAxisID]->Axis_GetAxisMotionState())
-            break;
-        bAxisEnableCmd[nAxisID] = true;
-    }
-    if(0 == AxisList.size())
-    {
-        for(uint32_t i = 0;i<m_nConfiguredAxisNum;i++)
-        {
-            if(EN_AxisMotionState::motionState_power_off !=m_vAxis[i]->Axis_GetAxisMotionState())
-                break;
-            bAxisEnableCmd[i] = true;
+    if(AxisList.empty())for(std::size_t i=0;i<m_vAxis.size();++i)AxisList.push_back(static_cast<int>(i));
+    auto valid=[&](int id){return id>=0&&static_cast<std::size_t>(id)<m_vAxis.size()&&!m_vAxis[id]->Axis_GetErrorState()&&
+        (m_vAxis[id]->Axis_GetStatusWord()&0x8)==0&&
+        (m_vAxis[id]->Axis_GetAxisMotionState()==motionState_power_off||m_vAxis[id]->Axis_GetAxisMotionState()==motionState_standstill);};
+    for(const int id:AxisList)if(!valid(id))return CEC_SDL_INVALID_AXIS_STATE;
+    for(const int id:AxisList){
+        auto* axis=m_vAxis[id];
+        if(axis->Axis_GetAxisMotionState()==motionState_standstill){
+            if(axis->Axis_GetVirtualState()||(axis->Axis_GetStatusWord()&0x6f)==0x27)continue;
         }
+        bAxisEnableCmd[id]=true;
     }
     return REC_Successed;
 }

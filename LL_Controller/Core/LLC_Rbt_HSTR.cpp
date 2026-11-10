@@ -1,4 +1,5 @@
 #include "LLC_Rbt.h"
+#include "LL_CpsService.h"
 #include "LLC_Rbt_Bridge.h"  // 必须在Adapter之前，声明JSON映射的函数
 #include <HSTR/LLPCAdapter.hpp>
 
@@ -725,6 +726,7 @@ int LLC_Rbt::HSTR_RemoveBreakpoint(std::string fileName, uint32_t line)
 int LLC_Rbt::HSTR_RT()
 {
     if (!m_pHSTRruntime) { m_ApplicationStatus = HSTR::ApplicationStatus::NotCompiled; return -1; }
+    LL_CpsService::Get().Forces();
     hstrLogicalTimeUs += static_cast<std::uint64_t>(m_cycle_time * 1000.0);
     if (m_pHSTRruntime->GetApplicationStatus() == HSTR::ApplicationStatus::Running)
         m_pHSTRruntime->Cycle(hstrLogicalTimeUs);

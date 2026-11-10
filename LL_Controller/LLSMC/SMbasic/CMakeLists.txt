@@ -78,6 +78,8 @@ set_target_properties(SMbasic PROPERTIES
 # 链接单轴控制库，并向使用SMbasic的目标传递该依赖
 target_link_libraries(SMbasic PUBLIC
     CIA402Axis
+    AxisGroup
+    SMCAlgorithm
 )
 
 # 配置时显示自动生成文件的位置

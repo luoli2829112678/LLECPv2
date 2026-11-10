@@ -2519,6 +2519,7 @@ int ecx_send_processdata_group(ecx_contextt *context, uint8 group)
    uint16 sublength;
    uint8 idx;
    int wkc;
+   int tx_errors = 0;
    uint8 *data;
    boolean first = FALSE;
    uint16 currentsegment = 0;
@@ -2591,7 +2592,7 @@ int ecx_send_processdata_group(ecx_contextt *context, uint8 group)
                   first = FALSE;
                }
                /* send frame */
-               ecx_outframe_red(&context->port, idx);
+               if (ecx_outframe_red(&context->port, idx) <= 0) ++tx_errors;
                /* push index and data pointer on stack */
                ecx_pushindex(context, idx, data, sublength, DCO);
                length -= sublength;
@@ -2629,7 +2630,7 @@ int ecx_send_processdata_group(ecx_contextt *context, uint8 group)
                   first = FALSE;
                }
                /* send frame */
-               ecx_outframe_red(&context->port, idx);
+               if (ecx_outframe_red(&context->port, idx) <= 0) ++tx_errors;
                /* push index and data pointer on stack */
                ecx_pushindex(context, idx, data, sublength, DCO);
                length -= sublength;
@@ -2670,7 +2671,7 @@ int ecx_send_processdata_group(ecx_contextt *context, uint8 group)
                first = FALSE;
             }
             /* send frame */
-            ecx_outframe_red(&context->port, idx);
+            if (ecx_outframe_red(&context->port, idx) <= 0) ++tx_errors;
             /* push index and data pointer on stack.
              * the iomapinputoffset compensate for where the inputs are stored
              * in the IOmap if we use an overlapping IOmap. If a regular IOmap
@@ -2684,7 +2685,7 @@ int ecx_send_processdata_group(ecx_contextt *context, uint8 group)
       }
    }
 
-   return wkc;
+   return tx_errors ? -tx_errors : wkc;
 }
 
 /** Receive processdata from slaves.

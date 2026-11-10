@@ -10,6 +10,7 @@ using namespace std;
 #include "LL_Process.h"
 
 #include "../LLC_Rbt.h"
+#include "LL_CpsService.h"
 
 void EntryState(unsigned int unStateCode,const std::string&stateData)
 {
@@ -77,12 +78,13 @@ void ExitEmergencyStop(stateParam)
 //////////////////////////////////////////////////////////////////////////////////////
 void EntryControllerNotConnect(stateParam)
 {    
-    LLCRbt->CleanSlaveConfig();
-    LLCRbt->CleanIOConfig();
-    LLCRbt->CleanAxisConfig();
-    LLCRbt->CleanGroupConfig();
+    if (!LL_CpsService::Get().Attached()) {
+        LLCRbt->CleanSlaveConfig();
+        LLCRbt->CleanIOConfig();
+        LLCRbt->CleanAxisConfig();
+        LLCRbt->CleanGroupConfig();
+    }
     EntryState(unStateCode,stateData);
-    system("sudo ethtool -C enp2s0 rx-usecs 3");
 }
 void ExitControllerNotConnect(stateParam)
 {

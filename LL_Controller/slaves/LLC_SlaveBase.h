@@ -1,4 +1,5 @@
 #pragma once
+#include "LL_CpsProtocol.h"
 #include "LLC_main.h"
 #include "LLC_Robot_def.h"
 #include "LLSMC/CIA402Axis/CIA402Axis.h"
@@ -40,6 +41,7 @@ protected:
     // 上层设置的进度回调
     std::function<void(double)> m_fnFoEProgressCallback;
 public:
+    LL::Json axisOverrides=LL::Json::array();
     LLC_SlaveBase(/* args */);
     ~LLC_SlaveBase();
     // 映射从站PDO信息

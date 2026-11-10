@@ -1,5 +1,5 @@
 #include"CIA402Axis.h"
-CIA402Axis::CIA402Axis(bool bIsVirtual) : m_stPDO_Virtual{}
+CIA402Axis::CIA402Axis(bool bIsVirtual) : m_stPDO_Virtual{},m_stMirrorPDO{},m_st_map{},m_stAxisConfiguration{},m_stMotorMotionData{}
 { 
    InitAxis();
    m_bVirtual = bIsVirtual;
@@ -28,6 +28,7 @@ void CIA402Axis::InitAxis()
 {
     m_bVirtual = false;
     m_bBusy = false;
+    m_bError = false;
     m_bInit = false;
     m_nAxisID = 0;
     m_nErrorCode = 0;
@@ -45,32 +46,33 @@ int CIA402Axis::Axis_InitMap(ST_SMCInitMap st_map)
     {
         return AEC_SUCCESSED;
     }
+    if(!st_map.pControlword||!st_map.pStatusWord)return -1;
     m_st_map = st_map;
     //pdo镜像初始化防止飞车
     m_stMirrorPDO.Controlword = PDO_CONTROLWORD;
     m_stMirrorPDO.StatusWord = PDO_STATUSWORD;
-    if(nullptr!=&PDO_ACTUALPOSITION)
+    if(nullptr!=m_st_map.pActualPosition)
     {
         m_stMirrorPDO.TargetPosition = PDO_ACTUALPOSITION;
         m_stMirrorPDO.ActualPosition = PDO_ACTUALPOSITION;
-        PDO_TARGETPOSITION = PDO_ACTUALPOSITION;
+        if(m_st_map.pTargetPosition)PDO_TARGETPOSITION = PDO_ACTUALPOSITION;
     }
-    if(nullptr!=&PDO_ACTUALTORQUE)
+    if(nullptr!=m_st_map.pActualTorque)
     {
         m_stMirrorPDO.TargetTorque = PDO_ACTUALTORQUE;
         m_stMirrorPDO.ActualTorque = PDO_ACTUALTORQUE;
     }
-    if(nullptr!=&PDO_ACTVELOCITY)
+    if(nullptr!=m_st_map.pActualVelocity)
     {
         m_stMirrorPDO.TargetVelocity = PDO_ACTVELOCITY;
         m_stMirrorPDO.ActualVelocity = PDO_ACTVELOCITY;
     }
-    if(nullptr!=&PDO_ACTUALMODESOFOPERATION)
+    if(nullptr!=m_st_map.pActualModesOfOperation)
     {
         m_stMirrorPDO.TargetModesOfOperation = PDO_ACTUALMODESOFOPERATION;
         m_stMirrorPDO.ActualModesOfOperation = PDO_ACTUALMODESOFOPERATION;
     }
-    if(nullptr!=&PDO_JOINT_ACTUALPOSITION)
+    if(nullptr!=m_st_map.pJointActPosition)
     {
         m_stMirrorPDO.JointActPosition = PDO_JOINT_ACTUALPOSITION;
     }

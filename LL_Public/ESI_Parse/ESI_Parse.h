@@ -320,6 +320,8 @@ public:
 
     struct Device
     {
+        // Missing attribute keeps the historic dynamic CoE behavior.
+        bool supportsPdoUpload = true;
         std::string physics;
         std::string type;
         std::string name;

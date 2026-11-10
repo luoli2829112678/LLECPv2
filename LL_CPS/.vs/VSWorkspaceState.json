@@ -1,0 +1,18 @@
+{
+  "OutputFoldersPerTargetSystem": {
+    "Local Machine": [
+      "out\\build\\x64-Debug",
+      "out\\install\\x64-Debug"
+    ]
+  },
+  "ExpandedNodes": [
+    "",
+    "\\vendor",
+    "\\vendor\\EUI-NEO",
+    "\\vendor\\EUI-NEO\\3rd\\freetype",
+    "\\vendor\\EUI-NEO\\3rd\\freetype\\builds",
+    "\\vendor\\EUI-NEO\\3rd\\freetype\\builds\\windows",
+    "\\vendor\\EUI-NEO\\3rd\\freetype\\builds\\windows\\vc2010"
+  ],
+  "PreviewInSolutionExplorer": false
+}

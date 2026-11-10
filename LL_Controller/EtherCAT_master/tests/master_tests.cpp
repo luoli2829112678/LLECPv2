@@ -1,4 +1,5 @@
 #include "EtherCAT_Master.h"
+#include "LL_MasterRegistry.h"
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -15,6 +16,9 @@ extern "C" {
 using namespace std::chrono_literals;
 namespace {
 std::atomic<bool> loseFirst{false}, failFoe{false}, failBoot{false};
+std::atomic<bool> failSend{false}, failReceive{false};
+std::atomic<uint16_t> feedback{0};
+std::atomic<bool> failPreOp{false}, failSdo{false}, pendingSdoError{false};
 std::atomic<bool> eepromOwned{false}, failEeprom{false};
 std::array<uint16,65536> eepromWords{};
 std::atomic<int> mapActive{0}, maxMapActive{0}, openCount{0}, closeCount{0};
@@ -34,9 +38,9 @@ int ecx_config_init(ecx_contextt* ctx) {
     auto& s = ctx->slavelist[1];
     s.eep_id = static_cast<uint32>(reinterpret_cast<std::uintptr_t>(ctx->userdata));
     std::strcpy(s.name, first(ctx) ? "first" : "second");
-    s.state = EC_STATE_PRE_OP; s.mbx_l = s.mbx_rl = 128;
+    s.state = EC_STATE_INIT; s.mbx_l = s.mbx_rl = 128;
     s.mbx_wo = 0x1000; s.mbx_ro = 0x1100;
-    ctx->slavelist[0].state = EC_STATE_PRE_OP;
+    ctx->slavelist[0].state = EC_STATE_INIT;
     return 1;
 }
 int ecx_config_map_group(ecx_contextt* ctx, void* buffer, uint8) {
@@ -53,19 +57,27 @@ int ecx_config_map_group(ecx_contextt* ctx, void* buffer, uint8) {
 }
 boolean ecx_configdc(ecx_contextt*) { return TRUE; }
 void ecx_dcsync0(ecx_contextt*, uint16, boolean, uint32, int32) {}
+void ecx_dcsync01(ecx_contextt*, uint16, boolean, uint32, uint32, int32) {}
 int ecx_writestate(ecx_contextt* ctx, uint16 slave) {
     if (slave == 0) ctx->slavelist[1].state = ctx->slavelist[0].state;
     return 1;
 }
-uint16 ecx_statecheck(ecx_contextt* ctx, uint16 slave, uint16, int) { return ctx->slavelist[slave].state; }
+uint16 ecx_statecheck(ecx_contextt* ctx, uint16 slave, uint16 wanted, int) {
+    if(wanted==EC_STATE_PRE_OP&&!failPreOp)ctx->slavelist[slave].state=EC_STATE_PRE_OP;
+    return ctx->slavelist[slave].state;
+}
 int ecx_readstate(ecx_contextt* ctx) {
     if (loseFirst && first(ctx)) ctx->slavelist[1].state = EC_STATE_NONE;
     ctx->slavelist[0].state = ctx->slavelist[1].state;
     return ctx->slavelist[0].state;
 }
-int ecx_send_processdata(ecx_contextt*) { return 1; }
+int ecx_send_processdata(ecx_contextt*) { return failSend ? -1 : 1; }
 int ecx_receive_processdata(ecx_contextt* ctx, int) {
-    if (ctx->slavelist[1].inputs) std::memcpy(ctx->slavelist[1].inputs, ctx->slavelist[1].outputs, 2);
+    if(failReceive)return -1;
+    if (ctx->slavelist[1].inputs) {
+        const uint16_t value=feedback.load();
+        std::memcpy(ctx->slavelist[1].inputs,value?static_cast<const void*>(&value):ctx->slavelist[1].outputs,2);
+    }
     return loseFirst && first(ctx) ? 0 : 3;
 }
 int ecx_recover_slave(ecx_contextt* ctx, uint16 id, int) {
@@ -73,10 +85,19 @@ int ecx_recover_slave(ecx_contextt* ctx, uint16 id, int) {
 }
 int ecx_reconfig_slave(ecx_contextt* ctx, uint16 id, int) { ctx->slavelist[id].state = EC_STATE_SAFE_OP; return 1; }
 int ecx_SDOread(ecx_contextt* ctx, uint16, uint16, uint8, boolean, int* size, void* data, int) {
+    if(ctx->slavelist[1].state<EC_STATE_PRE_OP)return 0;
     if (*size < 4) return 0;
     std::memcpy(data, &ctx->slavelist[1].eep_id, 4); *size = 4; return 1;
 }
-int ecx_SDOwrite(ecx_contextt*, uint16, uint16, uint8, boolean, int, const void*, int) { return 1; }
+int ecx_SDOwrite(ecx_contextt* ctx, uint16 slave, uint16, uint8, boolean, int, const void*, int) {
+    if(failSdo){pendingSdoError=true;return 0;}
+    return ctx->slavelist[slave].state>=EC_STATE_PRE_OP?1:0;
+}
+boolean ecx_poperror(ecx_contextt*,ec_errort* error) {
+    if(!pendingSdoError.exchange(false))return FALSE;
+    *error={};error->Slave=1;error->Index=0x1c12;error->Etype=EC_ERR_TYPE_SDO_ERROR;error->AbortCode=0x06010002;
+    return TRUE;
+}
 uint32 ecx_readeeprom(ecx_contextt*, uint16, uint16 address, int) {
     if (eepromOwned) return eepromWords[address];
     if (address==0x003e) return 7;
@@ -104,6 +125,30 @@ int ecx_FOEread(ecx_contextt* ctx, uint16 id, char*, uint32, int* size, void* da
 int main() {
     try {
         {
+            auto backend=LL::CreateEtherCATMaster({"mirror",LL::BusType::EtherCAT,"a",1000});
+            check(backend->Scan()&&backend->Configure(),"backend configure failed");
+            uint8_t* input=nullptr;uint8_t* output=nullptr;
+            backend->VisitSlaves([&](int,void* native){auto& s=static_cast<ec_slavet*>(native)[1];input=s.inputs;output=s.outputs;return true;});
+            check(backend->Start(false),"backend manual start failed");
+            output[0]=0x56;output[1]=0x12;
+            check(backend->Exchange()==3&&input[0]==0x56&&input[1]==0x12,"backend input mirror lags the received manual frame");
+            backend->Stop();
+            feedback=0x2345;
+            check(backend->Start(true),"backend background start failed");
+            const auto target=backend->Status().cycles+2;
+            const auto deadline=std::chrono::steady_clock::now()+1s;
+            while(backend->Status().cycles<target&&std::chrono::steady_clock::now()<deadline)std::this_thread::sleep_for(1ms);
+            check(backend->RefreshInputs()&&input[0]==0x45&&input[1]==0x23,"background feedback never reached stable PDO mirror");
+            check(output[0]==0x56&&output[1]==0x12,"refreshing input changed command outputs");
+            backend->Stop();backend->Close();feedback=0;
+        }
+        {
+            EtherCAT_Master notReady;check(notReady.Open("a"),"PRE_OP failure fixture open failed");
+            failPreOp=true;check(notReady.ScanSlaves()<0,"scan accepted a slave that never reached PRE_OP");failPreOp=false;
+            check(notReady.GetLastError().find("PRE_OP")!=std::string::npos,"PRE_OP failure has no state diagnostic");
+            check(notReady.ConfigureProcessData()<0,"failed PRE_OP scan allowed PDO mapping");
+        }
+        {
             EtherCAT_Master invalid;
             check(!invalid.Open(""), "empty interface accepted");
             check(!invalid.Open("bad"), "failed NIC accepted");
@@ -113,6 +158,11 @@ int main() {
         EtherCAT_Master a, b;
         check(a.Open("a") && b.Open("b"), "open failed");
         check(a.ScanSlaves() == 1 && b.ScanSlaves() == 1, "scan failed");
+        check(a.GetSlaves()[0].state==EC_STATE_PRE_OP,"scan did not refresh cached PRE_OP before SDO initialization");
+        const uint32 zero=0;
+        check(a.WriteSDO(1,0x1c12,0,&zero,4)>0,"PDO initialization blocked by stale slave state");
+        failSdo=true;check(a.WriteSDO(1,0x1c12,0,&zero,4)<=0,"SDO failure fixture accepted");failSdo=false;
+        check(a.GetLastError().find("code=0x6010002")!=std::string::npos,"SDO abort detail was discarded");
         auto mapA = std::async(std::launch::async, [&] { return a.ConfigureProcessData(); });
         auto mapB = std::async(std::launch::async, [&] { return b.ConfigureProcessData(); });
         check(mapA.get() == 4 && mapB.get() == 4 && maxMapActive == 1, "SOEM shared mapping workspace not protected");
@@ -122,6 +172,7 @@ int main() {
         check(!a.WriteOutputs(1, &output, 2, 1), "PDO boundary accepted");
         check(a.ExchangeProcessData() == 3 && b.ExchangeProcessData() == 3, "manual exchange failed");
         check(a.ReadInputs(1)[0] == 42 && b.ReadInputs(1)[0] == 0, "master PDO contamination");
+        const auto initialStats=a.GetMonitorStatus();failSend=true;failReceive=true;a.ExchangeProcessData();failSend=false;failReceive=false;const auto failedStats=a.GetMonitorStatus();check(failedStats.sendErrors==initialStats.sendErrors+1&&failedStats.receiveErrors==initialStats.receiveErrors+1,"TX/RX failures were not counted independently");check(failedStats.sentFrames==initialStats.sentFrames,"Failed TX counted as sent frame");check(b.GetMonitorStatus().sendErrors==0,"TX errors leaked to another master");
         uint32 value = 0; int size = 4;
         check(a.ReadSDO(1, 0x1000, 0, &value, size) == 1 && value == 1, "SDO context wrong");
         size = 4;
@@ -129,6 +180,8 @@ int main() {
         EtherCAT_Master::CycleOptions cycle;
         cycle.period = 1ms; cycle.monitorPeriod = 2ms; cycle.autoRecover = true;
         check(a.Start(cycle) && b.Start(cycle), "parallel start failed");
+        std::this_thread::sleep_for(1050ms);
+        check(a.GetMonitorStatus().framesPerSecond>0&&b.GetMonitorStatus().framesPerSecond>0,"Measured frame rate did not update");
         check(a.ExchangeProcessData() == -1 && a.ScanSlaves() == -1, "running master allowed reconfiguration");
         loseFirst = true;
         const auto recoveryDeadline = std::chrono::steady_clock::now() + 1s;

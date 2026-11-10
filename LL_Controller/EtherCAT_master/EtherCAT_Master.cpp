@@ -7,6 +7,7 @@
 #include <limits>
 #include <mutex>
 #include <thread>
+#include <sstream>
 extern "C" {
 #include "soem/soem.h"
 }
@@ -32,12 +33,28 @@ struct EtherCAT_Master::Impl {
     std::thread worker;
     CycleOptions options;
     MonitorStatus stats;
+    std::chrono::steady_clock::time_point rateTime{};
+    std::uint64_t rateFrames=0;
     std::atomic<bool> foeActive{false}, foeWriting{false}, foeSucceeded{false};
     std::atomic<std::size_t> foeTransferred{0}, foeTotal{0};
     std::atomic<int> foeResult{0};
     static thread_local Impl* foeOwner;
 
     int fail(const std::string& message) { error = message; return -1; }
+    int sdoFailure(const char* operation,std::uint16_t slave,std::uint16_t index,std::uint8_t sub,int size,int result) {
+        const auto& s=context->slavelist[slave];
+        std::ostringstream detail;
+        detail<<"SDO "<<operation<<" failed: slave="<<slave<<" object=0x"<<std::hex<<index<<':'<<static_cast<unsigned>(sub)
+              <<" state=0x"<<s.state<<" AL=0x"<<s.ALstatuscode<<std::dec<<" bytes="<<size<<" result="<<result
+              <<" mailbox="<<s.mbx_l<<'/'<<s.mbx_rl;
+        ec_errort item{};bool found=false;
+        for(int n=0;n<64&&ecx_poperror(context.get(),&item);++n)
+            if(item.Slave==slave&&(item.Index==0||item.Index==index)) {
+                found=true;detail<<"; SOEM type="<<item.Etype<<" code=0x"<<std::hex<<static_cast<std::uint32_t>(item.AbortCode)<<std::dec;
+            }
+        if(!found)detail<<"; no SOEM error record (check mailbox state and response timeout)";
+        return fail(detail.str());
+    }
     bool validSlave(std::uint16_t slave) const {
         return opened && slave > 0 && slave <= context->slavecount;
     }
@@ -56,8 +73,15 @@ struct EtherCAT_Master::Impl {
     }
     int exchange(int timeout) {
         const int sent = ecx_send_processdata(context.get());
-        if (sent <= 0) ++stats.sendErrors;
+        const auto frames=std::max<unsigned>(1,context->idxstack.pushed);
+        const auto failures=sent>0?0u:std::min<unsigned>(frames,sent<0?static_cast<unsigned>(-sent):1u);
+        stats.sendErrors+=failures;stats.sentFrames+=frames-failures;
+        const auto now=std::chrono::steady_clock::now();
+        if(rateTime.time_since_epoch().count()==0){rateTime=now;rateFrames=stats.sentFrames;}
+        const auto elapsed=std::chrono::duration<double>(now-rateTime).count();
+        if(elapsed>=1.0){stats.framesPerSecond=(stats.sentFrames-rateFrames)/elapsed;rateTime=now;rateFrames=stats.sentFrames;}
         const int wkc = ecx_receive_processdata(context.get(), timeout);
+        if(wkc<=0)++stats.receiveErrors;
         ++stats.cycles;
         stats.actualWkc = wkc;
         stats.dcTimeNs = context->DCtime;
@@ -161,6 +185,7 @@ struct EtherCAT_Master::Impl {
         context->slavecount = 0;
         ioMap.clear();
         stats = {};
+        rateTime={};rateFrames=0;
     }
     static int foeHook(uint16, int, int size) {
         if (foeOwner && size >= 0) {
@@ -287,7 +312,20 @@ int EtherCAT_Master::ScanSlaves() {
     const int count = ecx_config_init(p.context.get());
     p.scanned = true;
     p.requiresRescan = false;
-    if (count <= 0) p.fail("No slaves found or configuration failed"); else p.error.clear();
+    if (count <= 0) return p.fail("No slaves found or configuration failed");
+    // config_init requests PRE_OP but does not refresh slavelist[].state.
+    // SOEM's synchronous mailbox path refuses to send while its cached state is below PRE_OP.
+    for(int i=1;i<=count;++i) {
+        const auto state=ecx_statecheck(p.context.get(),static_cast<uint16>(i),EC_STATE_PRE_OP,EC_TIMEOUTSTATE);
+        if(state!=EC_STATE_PRE_OP) {
+            p.requiresRescan=true;
+            std::ostringstream message;
+            message<<"Slave "<<i<<" did not reach PRE_OP before mailbox initialization: state=0x"<<std::hex<<state
+                   <<" AL=0x"<<p.context->slavelist[i].ALstatuscode;
+            return p.fail(message.str());
+        }
+    }
+    p.error.clear();
     return count;
 }
 int EtherCAT_Master::ConfigureProcessData(bool dc) {
@@ -320,6 +358,17 @@ bool EtherCAT_Master::ConfigureSync0(std::uint16_t id, bool enabled, std::uint32
     ecx_dcsync0(p.context.get(), id, enabled ? TRUE : FALSE, cycleNs, shiftNs);
     p.error.clear();
     return true; // SOEM 的配置函数无返回值；实际同步状态需在从站上确认
+}
+bool EtherCAT_Master::ConfigureSync01(std::uint16_t id, std::uint32_t cycle0Ns, std::uint32_t cycle1Ns, std::int32_t shiftNs) {
+    auto& p = *m_impl;
+    std::lock_guard<std::mutex> life(p.lifecycleMutex);
+    std::lock_guard<std::mutex> lock(p.ioMutex);
+    if (!p.validSlave(id) || p.running || p.manualActive || !p.mapped || !p.context->slavelist[id].hasdc || !cycle0Ns) {
+        p.fail("SYNC0/1 requires a stopped, mapped DC-capable slave and nonzero cycle"); return false;
+    }
+    ecx_dcsync01(p.context.get(), id, TRUE, cycle0Ns, cycle1Ns, shiftNs);
+    p.error.clear();
+    return true;
 }
 bool EtherCAT_Master::RequestState(std::uint16_t slave, State state, int timeout) {
     auto& p = *m_impl;
@@ -362,6 +411,7 @@ bool EtherCAT_Master::Start(const CycleOptions& opts) {
         p.fail("OP was not reached; inspect slave AL status and PDO configuration"); return false;
     }
     p.options = opts;
+    p.rateTime=std::chrono::steady_clock::now();p.rateFrames=p.stats.sentFrames;p.stats.framesPerSecond=0;
     if (!opts.background) { p.manualActive = true; p.error.clear(); return true; }
     p.running = true;
     try { p.worker = std::thread([&p] { p.loop(); }); }
@@ -406,7 +456,7 @@ std::vector<EtherCAT_Master::SlaveInfo> EtherCAT_Master::GetSlaves() const {
         SlaveInfo info;
         info.id = static_cast<std::uint16_t>(i); info.state = s.state; info.alStatusCode = s.ALstatuscode;
         info.vendorId = s.eep_man; info.productCode = s.eep_id; info.revision = s.eep_rev; info.serial = s.eep_ser;
-        info.name = s.name; info.inputBytes = (s.Ibits + 7u) / 8u; info.outputBytes = (s.Obits + 7u) / 8u;
+        info.name = s.name; info.inputBytes = (s.Ibits + s.Istartbit + 7u) / 8u; info.outputBytes = (s.Obits + s.Ostartbit + 7u) / 8u;
         info.inputStartBit = s.Istartbit; info.outputStartBit = s.Ostartbit;
         info.lost = s.islost != 0; info.hasDistributedClock = s.hasdc != 0;
         result.push_back(info);
@@ -418,9 +468,15 @@ bool EtherCAT_Master::WriteOutputs(std::uint16_t id, const void* data, std::size
     std::lock_guard<std::mutex> lock(p.ioMutex);
     if (!p.mapped || !p.validSlave(id) || (!data && size)) { p.fail("Invalid PDO output request"); return false; }
     const auto& s = p.context->slavelist[id];
-    const std::size_t bytes = (s.Obits + 7u) / 8u;
+    const std::size_t bytes = (s.Obits + s.Ostartbit + 7u) / 8u;
     if (offset > bytes || size > bytes - offset || (size && !s.outputs)) { p.fail("PDO output range exceeds slave mapping"); return false; }
-    if (size) std::memcpy(s.outputs + offset, data, size);
+    if (size) {
+        const auto* source=static_cast<const std::uint8_t*>(data);
+        for(std::size_t n=0;n<size;++n){const auto byte=offset+n;std::uint8_t mask=0;
+            for(unsigned bit=0;bit<8;++bit){const auto pos=byte*8+bit;if(pos>=s.Ostartbit&&pos<s.Ostartbit+s.Obits)mask|=static_cast<std::uint8_t>(1u<<bit);}
+            s.outputs[byte]=static_cast<std::uint8_t>((s.outputs[byte]&~mask)|(source[n]&mask));
+        }
+    }
     return true;
 }
 std::vector<std::uint8_t> EtherCAT_Master::ReadInputs(std::uint16_t id) const {
@@ -428,7 +484,7 @@ std::vector<std::uint8_t> EtherCAT_Master::ReadInputs(std::uint16_t id) const {
     std::lock_guard<std::mutex> lock(p.ioMutex);
     if (!p.mapped || !p.validSlave(id)) return {};
     const auto& s = p.context->slavelist[id];
-    const std::size_t bytes = (s.Ibits + 7u) / 8u;
+    const std::size_t bytes = (s.Ibits + s.Istartbit + 7u) / 8u;
     if (!bytes || !s.inputs) return {};
     return {s.inputs, s.inputs + bytes};
 }
@@ -438,7 +494,7 @@ int EtherCAT_Master::ReadSDO(std::uint16_t id, std::uint16_t index, std::uint8_t
     std::lock_guard<std::mutex> lock(p.ioMutex);
     if (!p.validSlave(id) || !data || size <= 0 || timeout <= 0) return p.fail("Invalid SDO read request");
     const int result = ecx_SDOread(p.context.get(), id, index, sub, ca ? TRUE : FALSE, &size, data, timeout);
-    if (result <= 0) p.fail("SDO read failed");
+    if (result <= 0) p.sdoFailure("upload",id,index,sub,size,result);
     return result;
 }
 int EtherCAT_Master::WriteSDO(std::uint16_t id, std::uint16_t index, std::uint8_t sub,
@@ -447,7 +503,7 @@ int EtherCAT_Master::WriteSDO(std::uint16_t id, std::uint16_t index, std::uint8_
     std::lock_guard<std::mutex> lock(p.ioMutex);
     if (!p.validSlave(id) || !data || size <= 0 || timeout <= 0) return p.fail("Invalid SDO write request");
     const int result = ecx_SDOwrite(p.context.get(), id, index, sub, ca ? TRUE : FALSE, size, data, timeout);
-    if (result <= 0) p.fail("SDO write failed");
+    if (result <= 0) p.sdoFailure("download",id,index,sub,size,result);
     return result;
 }
 int EtherCAT_Master::FoEWrite(std::uint16_t id, const std::string& name,

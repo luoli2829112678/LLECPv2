@@ -52,7 +52,9 @@ struct Runtime {
                         const int ready=poll(&event,1,1);
                         if(ready<0){if(errno==EINTR)continue;break;}
                         if(ready>0) {
-                            if(event.revents&(POLLERR|POLLHUP|POLLNVAL))break;
+                            if(event.revents&(POLLERR|POLLNVAL))break;
+                            // Drain a final ACK/command delivered together with FIN before closing.
+                            if(!(event.revents&POLLIN)){if(event.revents&POLLHUP)break;continue;}
                             char bytes[4096];const auto n=recv(fd,bytes,sizeof(bytes),0);
                             if(n<=0)break;
                             if(handler->OnRecv(fd,std::string(bytes,static_cast<std::size_t>(n)))<0)break;

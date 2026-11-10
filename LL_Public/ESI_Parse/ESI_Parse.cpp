@@ -269,6 +269,8 @@ ESI_Parse::Device ESI_Parse::parseDevice(pugi::xml_node deviceNode, const std::v
     Device outDevice;
 
     if (deviceNode.attribute("Physics")) outDevice.physics = deviceNode.attribute("Physics").as_string();
+    const auto coe=deviceNode.child("Mailbox").child("CoE");
+    if(coe.attribute("PdoUpload"))outDevice.supportsPdoUpload=xmlBool(coe.attribute("PdoUpload"));
 
     pugi::xml_node typeNode = deviceNode.child("Type");
     if (typeNode) {

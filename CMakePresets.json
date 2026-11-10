@@ -1,0 +1,100 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows CPS / Visual Studio 2022",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-vs2022",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "LLECP_BUILD_CONTROLLER": "OFF",
+        "LLECP_BUILD_CPS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "windows-vs2026",
+      "displayName": "Windows CPS / Visual Studio 2026",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-vs2026",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "LLECP_BUILD_CONTROLLER": "OFF",
+        "LLECP_BUILD_CPS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux server / controller only",
+      "generator": "Ninja",
+      "binaryDir": "/usr/local/bin/LLECT/build/linux",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LLECP_OUTPUT_DIRECTORY": "/usr/local/bin/LLECT",
+        "BUILD_TESTING": "ON",
+        "LLECP_BUILD_CONTROLLER": "ON",
+        "LLECP_BUILD_CPS": "OFF"
+      }
+    },
+    {
+      "name": "linux-cps",
+      "displayName": "Linux desktop / graphical CPS (requires X11 development packages)",
+      "generator": "Ninja",
+      "binaryDir": "/usr/local/bin/LLECT/build/linux-cps",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LLECP_OUTPUT_DIRECTORY": "/usr/local/bin/LLECT",
+        "LLECP_BUILD_CONTROLLER": "OFF",
+        "LLECP_BUILD_CPS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-release-2022",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-release-2026",
+      "configurePreset": "windows-vs2026",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-cps",
+      "configurePreset": "linux-cps"
+    }
+  ]
+}

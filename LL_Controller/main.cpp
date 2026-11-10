@@ -13,7 +13,10 @@ int main(int argc,char** argv) {
     }
     std::signal(SIGINT,stop);std::signal(SIGTERM,stop);std::signal(SIGPIPE,SIG_IGN);
     try {
-        if(!LL_InitializeController(argc>1?argv[1]:"runtime"))return 1;
+        if(!LL_InitializeController(argc>1?argv[1]:"runtime")){
+            std::cerr<<"[LL_Controller] Startup failed; see the error above.\n";
+            return 1;
+        }
         std::cout<<"LL_Controller ready; register a master before starting it.\n";
         while(!quit)std::this_thread::sleep_for(std::chrono::milliseconds(100));
         LL_ShutdownController();return 0;

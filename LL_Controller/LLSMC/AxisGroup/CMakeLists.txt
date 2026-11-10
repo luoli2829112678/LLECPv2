@@ -2,6 +2,7 @@
 add_library(AxisGroup SHARED
     AxisGroup.cpp
 )
+target_link_libraries(AxisGroup PUBLIC CIA402Axis SMCAlgorithm)
 
 # 公开轴组头文件目录
 target_include_directories(AxisGroup PUBLIC

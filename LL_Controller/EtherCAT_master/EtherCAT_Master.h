@@ -33,6 +33,8 @@ public:
         int slaveCount = 0, expectedWkc = 0, actualWkc = 0;
         std::uint16_t masterState = 0;
         std::uint64_t cycles = 0, sendErrors = 0, wkcErrors = 0;
+        std::uint64_t sentFrames = 0, receiveErrors = 0;
+        double framesPerSecond = 0;
         std::uint64_t consecutiveWkcErrors = 0, missedDeadlines = 0, recoveryAttempts = 0;
         std::int64_t dcTimeNs = 0;
         std::chrono::microseconds lastCycleTime{0};
@@ -62,6 +64,7 @@ public:
 
     int ConfigureProcessData(bool distributedClocks = true); // 返回映射字节数，失败为 -1
     bool ConfigureSync0(std::uint16_t slave, bool enabled, std::uint32_t cycleNs, std::int32_t shiftNs = 0);
+    bool ConfigureSync01(std::uint16_t slave, std::uint32_t cycle0Ns, std::uint32_t cycle1Ns, std::int32_t shiftNs = 0);
     bool RequestState(std::uint16_t slave, State state, int timeoutUs = 2000000);
     bool Start(const CycleOptions& options);
     bool Start();

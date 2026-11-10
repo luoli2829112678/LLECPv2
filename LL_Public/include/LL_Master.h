@@ -19,11 +19,14 @@ struct SlaveState {
     std::uint32_t productCode = 0, revision = 0;
     std::string name;
     bool connected = false; // 是否实际响应；PRE_OP/SAFE_OP 本身不表示断联。
+    std::uint32_t vendorId = 0;
 };
 struct MasterStatus {
     bool opened = false, running = false, connected = false;
     int expectedWkc = 0, actualWkc = 0;
     std::uint64_t cycles = 0, wkcErrors = 0, missedDeadlines = 0;
+    std::uint64_t sentFrames = 0, sendErrors = 0, receiveErrors = 0;
+    double framesPerSecond = 0;
     std::vector<SlaveState> slaves;
 };
 struct FileTransferStatus {
@@ -42,10 +45,15 @@ public:
     virtual void Stop() = 0;
     virtual void Close() = 0;
     virtual int Exchange() = 0;
+    // Refresh input mirrors without sending or changing output data.
+    virtual bool RefreshInputs() { return true; }
     virtual bool Poll() = 0;
     virtual MasterStatus Status() const = 0;
     virtual std::string LastError() const = 0;
     virtual bool ConfigureSync0(std::uint16_t, bool enabled, std::uint32_t, std::int32_t) { return !enabled; }
+    virtual bool ConfigureSync01(std::uint16_t id, std::uint32_t cycle0, std::uint32_t cycle1, std::int32_t shift) {
+        return cycle1 == 0 && ConfigureSync0(id, true, cycle0, shift);
+    }
     virtual bool ChangeSlaveState(std::uint16_t slave, std::uint16_t state) = 0;
     virtual int ReadSDO(std::uint16_t slave, std::uint16_t index, std::uint8_t sub,
                         void* data, int& size, bool ca, int timeout) = 0;

@@ -1,36 +1,116 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "配置 LLECP",
-            "type": "process",
-            "command": "cmake",
-            "args": [
-                "-S",
-                "${workspaceFolder}",
-                "-B",
-                "${workspaceFolder}/build",
-                "-DCMAKE_BUILD_TYPE=Debug"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "label": "编译 LLECP",
-            "type": "process",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "${workspaceFolder}/build",
-                "--target",
-                "LLECP",
-                "--parallel"
-            ],
-            "dependsOn": "配置 LLECP",
-            "problemMatcher": ["$gcc"],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "配置 LLECP",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "-S",
+        "${workspaceFolder}",
+        "-B",
+        "${workspaceFolder}/build",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "编译全部",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build",
+        "--target",
+        "LL_Controller",
+        "LL_CPS",
+        "--parallel"
+      ],
+      "dependsOn": "配置 LLECP",
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "编译 LL_Controller",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build",
+        "--target",
+        "LL_Controller",
+        "--parallel"
+      ],
+      "dependsOn": "配置 LLECP",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "编译 LL_CPS",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build",
+        "--target",
+        "LL_CPS",
+        "--parallel"
+      ],
+      "dependsOn": "配置 LLECP",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "配置测试",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "-S",
+        "${workspaceFolder}",
+        "-B",
+        "${workspaceFolder}/build",
+        "-DBUILD_TESTING=ON",
+        "-DLLECP_OUTPUT_DIRECTORY=/usr/local/bin/LLECT"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "编译测试",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build",
+        "--target",
+        "master_tests",
+        "protocol_registry_tests",
+        "controller_network_tests",
+        "--parallel"
+      ],
+      "dependsOn": "配置测试",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "测试 LLECP",
+      "type": "process",
+      "command": "ctest",
+      "args": [
+        "--test-dir",
+        "${workspaceFolder}/build",
+        "--output-on-failure"
+      ],
+      "dependsOn": "编译测试",
+      "problemMatcher": []
+    }
+  ]
 }

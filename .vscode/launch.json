@@ -1,26 +1,41 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "调试 LL_Controller",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/usr/local/bin/LLECT/LL_Controller",
+      "args": [
+        "/usr/local/bin/LLECT/runtime"
+      ],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "编译 LL_Controller",
+      "externalConsole": false,
+      "setupCommands": [
         {
-            "name": "调试 HRPC/LLECP",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/usr/local/bin/HRPC/LLECP",
-            "args": ["enp2s0"],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
-            "preLaunchTask": "编译 LLECP",
-            "setupCommands": [
-                {
-                    "description": "启用 GDB 格式化显示",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
         }
-    ]
+      ]
+    },
+    {
+      "name": "调试 LL_CPS",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/usr/local/bin/LLECT/LL_CPS",
+      "args": [
+        "127.0.0.1",
+        "8888",
+        "ListMasters"
+      ],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "编译 LL_CPS",
+      "externalConsole": false
+    }
+  ]
 }

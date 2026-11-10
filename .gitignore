@@ -1,1 +1,6 @@
 build/
+build-*/
+runtime/
+*.o
+*.obj
+*.exe

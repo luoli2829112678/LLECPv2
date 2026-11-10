@@ -1,0 +1,19 @@
+Validation: Linux x86_64
+HSTR standalone CMake build: PASS
+PASS positive
+PASS numeric_boundaries
+PASS sizeof_types
+PASS identifier_regression
+PASS string_to_int
+PASS struct_to_int
+PASS array_to_int
+PASS inout_mismatch
+PASS bad_input
+PASS sizeof_unknown
+PASS sizeof_empty
+PASS mixed_ulint_signed
+PASS 12 end-to-end cases
+PASS existing REF/DREF compiler syntax
+Existing initialization compiler tests: 28 PASS, 1 known xfail excluded
+Interface generator tests: 3 PASS
+Full controller/ARM/hardware validation: not run

@@ -1,0 +1,171 @@
+{
+  "functions": [
+    {
+      "name": "LLC_TEST",
+      "return": "DINT",
+      "callback": "LLC_Test",
+      "sdk": "LLC_Test",
+      "params": [["value", "DINT"]],
+      "description": "测试接口：输入一个DINT，返回一个DINT。"
+    },
+    {
+      "name": "SLAVE_PDO_READ",
+      "return": "DINT",
+      "callback": "pdoRead",
+      "sdk": "LLC_SlavePDORead",
+      "params": [["nslave", "DINT"], ["index", "DINT"], ["subindex", "DINT"]],
+      "description": "读取 PDO，返回 32 位值。"
+    },
+    {
+      "name": "SLAVE_PDO_WRITE",
+      "return": "DINT",
+      "callback": "pdoWrite",
+      "sdk": "LLC_SlavePDOWrite",
+      "params": [["nslave", "DINT"], ["index", "DINT"], ["subindex", "DINT"], ["value", "DINT"]],
+      "description": "写入 32 位 PDO 值。"
+    },
+    {
+      "name": "AXIS_ENABLE",
+      "return": "DINT",
+      "callback": "axisEnable",
+      "sdk": "LLC_AxisEnableChecked",
+      "params": [["axis", "DINT"]],
+      "description": "使能指定轴。旧版 VOID 接口，失败时 Runtime 进入 Error；需要返回码请用 _RESULT。"
+    },
+    {
+      "name": "AXIS_DISABLE",
+      "return": "VOID",
+      "callback": "axisDisable",
+      "sdk": "LLC_AxisDisableChecked",
+      "params": [["axis", "DINT"]],
+      "description": "去使能指定轴。旧版 VOID 接口，失败时 Runtime 进入 Error；需要返回码请用 _RESULT。"
+    },
+    {
+      "name": "AXIS_GETACTPOS",
+      "return": "LREAL",
+      "callback": "axisGetActPos",
+      "sdk": "LLC_AxisGetActPos",
+      "params": [["axis", "DINT"]],
+      "description": "读取轴实际位置，单位由 SDK 定义。",
+      "aliases": [
+        {
+          "name": "AXIS_SETAXISACTPOS",
+          "params": [["axisid", "DINT"]],
+          "description": "历史别名：实际读取位置，不修改轴位置。"
+        }
+      ]
+    },
+    {
+      "name": "AXIS_ENABLE_RESULT",
+      "return": "DINT",
+      "callback": "bridgeAxisEnable",
+      "sdk": "LLC_AxisEnable",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_DISABLE_RESULT",
+      "return": "DINT",
+      "callback": "bridgeAxisDisable",
+      "sdk": "LLC_AxisDisable",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_RESET",
+      "return": "DINT",
+      "callback": "bridgeAxisReset",
+      "sdk": "LLC_AxisReset",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_STOP",
+      "return": "DINT",
+      "callback": "bridgeAxisStop",
+      "sdk": "LLC_AxisStop",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_MOVE_SET",
+      "return": "DINT",
+      "callback": "bridgeAxisMoveSet",
+      "sdk": "LLC_AxisMoveSet",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_READ_STATE",
+      "return": "DINT",
+      "callback": "bridgeAxisReadState",
+      "sdk": "LLC_AxisReadState",
+      "params": [["axis", "DINT"]],
+      "description": "轴状态或控制器返回码；命令成功表示已受理，不代表运动已完成。"
+    },
+    {
+      "name": "AXIS_ABS_MOVE",
+      "return": "DINT",
+      "callback": "bridgeAxisAbsMove",
+      "sdk": "LLC_AxisAbsMove",
+      "params": [["axis", "DINT"], ["pos", "LREAL"], ["vel", "LREAL"], ["acc", "LREAL"], ["dec", "LREAL"], ["jerk", "LREAL"]],
+      "description": "位置运动，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_REL_MOVE",
+      "return": "DINT",
+      "callback": "bridgeAxisRelMove",
+      "sdk": "LLC_AxisRelMove",
+      "params": [["axis", "DINT"], ["pos", "LREAL"], ["vel", "LREAL"], ["acc", "LREAL"], ["dec", "LREAL"], ["jerk", "LREAL"]],
+      "description": "位置运动，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_VELOCITY_MOVE",
+      "return": "DINT",
+      "callback": "bridgeAxisVelocityMove",
+      "sdk": "LLC_AxisVelocityMove",
+      "params": [["axis", "DINT"], ["vel", "LREAL"], ["acc", "LREAL"], ["dec", "LREAL"], ["jerk", "LREAL"]],
+      "description": "速度正负表示方向，内部使用速度绝对值。"
+    },
+    {
+      "name": "AXIS_SET_MOVE_POS",
+      "return": "DINT",
+      "callback": "bridgeAxisSetMovePos",
+      "sdk": "LLC_AxisSetMovePos",
+      "params": [["axis", "DINT"], ["pos", "LREAL"]],
+      "description": "设置运动参数，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_SET_MOVE_VEL",
+      "return": "DINT",
+      "callback": "bridgeAxisSetMoveVel",
+      "sdk": "LLC_AxisSetMoveVel",
+      "params": [["axis", "DINT"], ["vel", "LREAL"]],
+      "description": "设置运动参数，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_SET_MOVE_ACC",
+      "return": "DINT",
+      "callback": "bridgeAxisSetMoveAcc",
+      "sdk": "LLC_AxisSetMoveAcc",
+      "params": [["axis", "DINT"], ["acc", "LREAL"]],
+      "description": "设置运动参数，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_SET_MOVE_DEC",
+      "return": "DINT",
+      "callback": "bridgeAxisSetMoveDec",
+      "sdk": "LLC_AxisSetMoveDec",
+      "params": [["axis", "DINT"], ["dec", "LREAL"]],
+      "description": "设置运动参数，返回控制器错误码。"
+    },
+    {
+      "name": "AXIS_SET_MOVE_JERK",
+      "return": "DINT",
+      "callback": "bridgeAxisSetMoveJerk",
+      "sdk": "LLC_AxisSetMoveJerk",
+      "params": [["axis", "DINT"], ["jerk", "LREAL"]],
+      "description": "设置运动参数，返回控制器错误码。"
+    }
+  ]
+}

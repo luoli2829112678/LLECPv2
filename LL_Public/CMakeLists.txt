@@ -1,0 +1,7 @@
+add_subdirectory(ESI_Parse)
+add_library(LL_Protocol STATIC src/LL_CommandCodec.cpp include/json/cJSON.c)
+target_include_directories(LL_Protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(LL_Protocol PUBLIC cxx_std_17)
+add_library(LL_Public INTERFACE)
+target_include_directories(LL_Public INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(LL_Public INTERFACE LL_Protocol ESI_Parse)

@@ -1,0 +1,524 @@
+{
+  "protocol": "comma-separated text terminated by semicolon",
+  "ports": {
+    "normal": 8888,
+    "follow": 8889,
+    "hstr": 8890,
+    "async": 8891,
+    "realtime": 8893,
+    "reply": 8894
+  },
+  "controllerCore": "LLC_Rbt",
+  "programmingRuntime": "HSTR",
+  "registeredBackend": "EtherCAT",
+  "reservedBackends": [
+    "Profinet",
+    "Modbus"
+  ],
+  "commands": [
+    {
+      "symbol": "Cmd_UnInitialized",
+      "name": "UnInitialized"
+    },
+    {
+      "symbol": "Cmd_ConnectSlaves",
+      "name": "ConnectSlaves"
+    },
+    {
+      "symbol": "Cmd_DisconnectSlaves",
+      "name": "DisconnectSlaves"
+    },
+    {
+      "symbol": "Cmd_ReadOperationMode",
+      "name": "ReadOperationMode"
+    },
+    {
+      "symbol": "Cmd_SetOperationMode",
+      "name": "SetOperationMode"
+    },
+    {
+      "symbol": "Cmd_CycleHandle",
+      "name": "CycleHandle"
+    },
+    {
+      "symbol": "Cmd_RobotEnable",
+      "name": "GrpEnable"
+    },
+    {
+      "symbol": "Cmd_RobotDisable",
+      "name": "GrpDisable"
+    },
+    {
+      "symbol": "Cmd_ControllerStop",
+      "name": "ControllerStop"
+    },
+    {
+      "symbol": "Cmd_ControllerReset",
+      "name": "ControllerReset"
+    },
+    {
+      "symbol": "Cmd_AxisStop",
+      "name": "AxisStop"
+    },
+    {
+      "symbol": "Cmd_CheckIs_EmergencyStop",
+      "name": "CheckIs_EmergencyStop"
+    },
+    {
+      "symbol": "Cmd_CheckIs_WatchDog",
+      "name": "CheckIs_WatchDog"
+    },
+    {
+      "symbol": "Cmd_CheckIs_SlaveDrop",
+      "name": "CheckIs_SlaveDrop"
+    },
+    {
+      "symbol": "Cmd_CheckIs_RobotError",
+      "name": "CheckIs_RobotError "
+    },
+    {
+      "symbol": "Cmd_CheckIs_ResetFinish",
+      "name": "CheckIs_ResetFinish "
+    },
+    {
+      "symbol": "Cmd_CheckIs_EmergencyStopHandled",
+      "name": "CheckIs_EmergencyStopHandled "
+    },
+    {
+      "symbol": "Cmd_CheckIs_NotElectrify",
+      "name": "CheckIs_NotElectrify"
+    },
+    {
+      "symbol": "Cmd_CheckIs_NotElectrifyInEmergencyStop",
+      "name": "CheckIs_NotElectrifyInEmergencyStop"
+    },
+    {
+      "symbol": "Cmd_CheckIs_NotElectrifyHandled",
+      "name": "CheckIs_NotElectrifyHandled"
+    },
+    {
+      "symbol": "Cmd_CheckIs_WatchDogHandled",
+      "name": "CheckIs_WatchDogHandled "
+    },
+    {
+      "symbol": "Cmd_CheckIs_ErrorStoppingHandled",
+      "name": "CheckIs_ErrorStoppingHandled"
+    },
+    {
+      "symbol": "Cmd_CheckIs_SlavesOP",
+      "name": "CheckIs_SlavesOP"
+    },
+    {
+      "symbol": "Cmd_CheckIs_Disabled",
+      "name": "CheckIs_Disabled"
+    },
+    {
+      "symbol": "Cmd_CheckIs_Enabled",
+      "name": "CheckIs_Enabled "
+    },
+    {
+      "symbol": "Cmd_CheckIs_Standby",
+      "name": "CheckIs_Standby"
+    },
+    {
+      "symbol": "Cmd_CheckIs_Moving",
+      "name": "CheckIs_Moving"
+    },
+    {
+      "symbol": "Cmd_CheckIs_Pausing",
+      "name": "CheckIs_Pausing"
+    },
+    {
+      "symbol": "Cmd_CheckIs_ContinueDone",
+      "name": "CheckIs_ContinueDone"
+    },
+    {
+      "symbol": "Cmd_StartMaster",
+      "name": "StartMaster"
+    },
+    {
+      "symbol": "Cmd_CloseMaster",
+      "name": "CloseMaster"
+    },
+    {
+      "symbol": "Cmd_ScanSlave",
+      "name": "ScanSlave"
+    },
+    {
+      "symbol": "Cmd_ReloadESI",
+      "name": "ReloadESI"
+    },
+    {
+      "symbol": "Cmd_SetSimulationType",
+      "name": "SetSimulationType"
+    },
+    {
+      "symbol": "Cmd_SetEcatCycleTime",
+      "name": "SetEcatCycleTime"
+    },
+    {
+      "symbol": "Cmd_SetIsConfigDC",
+      "name": "SetIsConfigDC"
+    },
+    {
+      "symbol": "Cmd_InitMaster",
+      "name": "InitMaster"
+    },
+    {
+      "symbol": "Cmd_RegistrationSlave",
+      "name": "RegistrationSlave"
+    },
+    {
+      "symbol": "Cmd_ConfigureSlavePDO",
+      "name": "ConfigureSlavePDO"
+    },
+    {
+      "symbol": "Cmd_RegistrationAxis",
+      "name": "RegistrationAxis"
+    },
+    {
+      "symbol": "Cmd_RegistrationIO",
+      "name": "RegistrationIO"
+    },
+    {
+      "symbol": "Cmd_SetRobotModel",
+      "name": "SetRobotModel"
+    },
+    {
+      "symbol": "Cmd_SetRobotControlType",
+      "name": "SetRobotControlType"
+    },
+    {
+      "symbol": "Cmd_SetSlaveType",
+      "name": "SetSlaveType"
+    },
+    {
+      "symbol": "Cmd_ReadSDO",
+      "name": "ReadSDO"
+    },
+    {
+      "symbol": "Cmd_WriteSDO",
+      "name": "WriteSDO"
+    },
+    {
+      "symbol": "Cmd_FOEwrite",
+      "name": "FOEwrite"
+    },
+    {
+      "symbol": "Cmd_GetFOEwriteProgress",
+      "name": "GetFOEwriteProgress"
+    },
+    {
+      "symbol": "Cmd_FOEread",
+      "name": "FOEread"
+    },
+    {
+      "symbol": "Cmd_GetFOEreadProgress",
+      "name": "GetFOEreadProgress"
+    },
+    {
+      "symbol": "Cmd_UpdateESI",
+      "name": "UpdateESI"
+    },
+    {
+      "symbol": "Cmd_WritePDO",
+      "name": "WritePDO"
+    },
+    {
+      "symbol": "Cmd_SetIO",
+      "name": "SetIO"
+    },
+    {
+      "symbol": "Cmd_GrpStop",
+      "name": "GrpStop"
+    },
+    {
+      "symbol": "Cmd_GrpInterrupt",
+      "name": "GrpInterrupt"
+    },
+    {
+      "symbol": "Cmd_GrpContinue",
+      "name": "GrpContinue"
+    },
+    {
+      "symbol": "Cmd_DumpInfo",
+      "name": "dumpInfo"
+    },
+    {
+      "symbol": "Cmd_AxisEnable",
+      "name": "AxisEnable"
+    },
+    {
+      "symbol": "Cmd_AxisDisable",
+      "name": "AxisDisable"
+    },
+    {
+      "symbol": "Cmd_AxisReset",
+      "name": "AxisReset"
+    },
+    {
+      "symbol": "Cmd_AxisSetOffset",
+      "name": "AxisSetOffset"
+    },
+    {
+      "symbol": "Cmd_AxisSetModesOfOperation",
+      "name": "AxisSetModesOfOperation"
+    },
+    {
+      "symbol": "Cmd_AxisHome",
+      "name": "AxisHome"
+    },
+    {
+      "symbol": "Cmd_AxisSetHomeParam",
+      "name": "AxisSetHomeParam"
+    },
+    {
+      "symbol": "Cmd_AxisReadHomeParam",
+      "name": "AxisReadHomeParam"
+    },
+    {
+      "symbol": "Cmd_AxisInitMotionMonitor",
+      "name": "AxisInitMotionMonitor"
+    },
+    {
+      "symbol": "Cmd_AxisAbsMove",
+      "name": "AxisAbsMove"
+    },
+    {
+      "symbol": "Cmd_AxisRelMove",
+      "name": "AxisRelMove"
+    },
+    {
+      "symbol": "Cmd_AxisBackAndForthMove",
+      "name": "AxisBackAndForthMove"
+    },
+    {
+      "symbol": "Cmd_AxisContinuousStepMove",
+      "name": "AxisContinuousStepMove"
+    },
+    {
+      "symbol": "Cmd_AxisVelocityMove",
+      "name": "AxisVelocityMove"
+    },
+    {
+      "symbol": "Cmd_SetAxisMovePos",
+      "name": "SetAxisMovePos"
+    },
+    {
+      "symbol": "Cmd_SetAxisStopParam",
+      "name": "SetAxisStopParam"
+    },
+    {
+      "symbol": "Cmd_SetAxisMoveVel",
+      "name": "SetAxisMoveVel"
+    },
+    {
+      "symbol": "Cmd_SetAxisMoveAcc",
+      "name": "SetAxisMoveAcc"
+    },
+    {
+      "symbol": "Cmd_SetAxisMoveDec",
+      "name": "SetAxisMoveDec"
+    },
+    {
+      "symbol": "Cmd_SetAxisMoveJerk",
+      "name": "SetAxisMoveJerk"
+    },
+    {
+      "symbol": "Cmd_SetAxisMove",
+      "name": "SetAxisMove"
+    },
+    {
+      "symbol": "Cmd_AxisFollowPosition",
+      "name": "AxisFollowPosition"
+    },
+    {
+      "symbol": "Cmd_AxisFollowVelocity",
+      "name": "AxisFollowVelocity"
+    },
+    {
+      "symbol": "Cmd_AxisFollowTorque",
+      "name": "AxisFollowTorque"
+    },
+    {
+      "symbol": "Cmd_SetAccFFScale",
+      "name": "SetAccFFScale"
+    },
+    {
+      "symbol": "Cmd_SetVelFFScale",
+      "name": "SetVelFFScale"
+    },
+    {
+      "symbol": "Cmd_SetJerkFFScale",
+      "name": "SetJerkFFScale"
+    },
+    {
+      "symbol": "Cmd_InitWayPoint",
+      "name": "InitWayPoint"
+    },
+    {
+      "symbol": "Cmd_PushWayPoint",
+      "name": "PushWayPoint"
+    },
+    {
+      "symbol": "Cmd_WayPointPushFinish",
+      "name": "WayPointPushFinish"
+    },
+    {
+      "symbol": "Cmd_ReadAxisInformation",
+      "name": "ReadAxisInformation"
+    },
+    {
+      "symbol": "Cmd_ReadGroupInformation",
+      "name": "ReadGroupInformation"
+    },
+    {
+      "symbol": "Cmd_HSTR_CreateApplication",
+      "name": "HSTR_CreateApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_SelectedApplication",
+      "name": "HSTR_SelectedApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddProgram",
+      "name": "HSTR_AddProgram"
+    },
+    {
+      "symbol": "Cmd_HSTR_DeleteProgram",
+      "name": "HSTR_DeleteProgram"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddFunction",
+      "name": "HSTR_AddFunction"
+    },
+    {
+      "symbol": "Cmd_HSTR_DeleteFunction",
+      "name": "HSTR_DeleteFunction"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddTask",
+      "name": "HSTR_AddTask"
+    },
+    {
+      "symbol": "Cmd_HSTR_DeleteTask",
+      "name": "HSTR_DeleteTask"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddTypeFile",
+      "name": "HSTR_AddTypeFile"
+    },
+    {
+      "symbol": "Cmd_HSTR_DeleteTypeFile",
+      "name": "HSTR_DeleteTypeFile"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddGlobalVariableFile",
+      "name": "HSTR_AddGlobalVariableFile"
+    },
+    {
+      "symbol": "Cmd_HSTR_DeleteGlobalVariableFile",
+      "name": "HSTR_DeleteGlobalVariableFile"
+    },
+    {
+      "symbol": "Cmd_HSTR_CompileApplication",
+      "name": "HSTR_CompileApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_RunApplication",
+      "name": "HSTR_RunApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_ResetProgram",
+      "name": "HSTR_ResetProgram"
+    },
+    {
+      "symbol": "Cmd_HSTR_AddBreakpoint",
+      "name": "HSTR_AddBreakpoint"
+    },
+    {
+      "symbol": "Cmd_HSTR_DebugContinue",
+      "name": "HSTR_DebugContinue"
+    },
+    {
+      "symbol": "Cmd_HSTR_DebugSingleStep",
+      "name": "HSTR_DebugSingleStep"
+    },
+    {
+      "symbol": "Cmd_HSTR_DebugStepInto",
+      "name": "HSTR_DebugStepInto"
+    },
+    {
+      "symbol": "Cmd_HSTR_GetDebugLocation",
+      "name": "HSTR_GetDebugLocation"
+    },
+    {
+      "symbol": "Cmd_HSTR_GetApplicationStatus",
+      "name": "HSTR_GetApplicationStatus"
+    },
+    {
+      "symbol": "Cmd_HSTR_RemoveBreakpoint",
+      "name": "HSTR_RemoveBreakpoint"
+    },
+    {
+      "symbol": "Cmd_HSTR_StopApplication",
+      "name": "HSTR_StopApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_ReadVariable",
+      "name": "HSTR_ReadVariable"
+    },
+    {
+      "symbol": "Cmd_HSTR_WriteVariable",
+      "name": "HSTR_WriteVariable"
+    },
+    {
+      "symbol": "Cmd_HSTR_GetSelectedApplication",
+      "name": "HSTR_GetSelectedApplication"
+    },
+    {
+      "symbol": "Cmd_HSTR_GetLastError",
+      "name": "HSTR_GetLastError"
+    },
+    {
+      "symbol": "Cmd_HSTR_GetCompilerDiagnostics",
+      "name": "HSTR_GetCompilerDiagnostics"
+    },
+    {
+      "symbol": "Cmd_RegistrationMaster",
+      "name": "RegistrationMaster"
+    },
+    {
+      "symbol": "Cmd_UnregisterMaster",
+      "name": "UnregisterMaster"
+    },
+    {
+      "symbol": "Cmd_SelectMaster",
+      "name": "SelectMaster"
+    },
+    {
+      "symbol": "Cmd_ListMasters",
+      "name": "ListMasters"
+    },
+    {
+      "symbol": "Cmd_ReadMasterStatus",
+      "name": "ReadMasterStatus"
+    },
+    {
+      "symbol": "Cmd_ReadSlaveStates",
+      "name": "ReadSlaveStates"
+    },
+    {
+      "symbol": "Cmd_SetSlaveState",
+      "name": "SetSlaveState"
+    },
+    {
+      "symbol": "Cmd_StartRegisteredMaster",
+      "name": "StartRegisteredMaster"
+    },
+    {
+      "symbol": "Cmd_StopRegisteredMaster",
+      "name": "StopRegisteredMaster"
+    }
+  ]
+}

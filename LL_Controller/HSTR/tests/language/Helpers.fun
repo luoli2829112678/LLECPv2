@@ -1,0 +1,14 @@
+FUNCTION Echo : LREAL
+VAR_INPUT Value : LREAL; END_VAR
+Echo := Value;
+END_FUNCTION
+FUNCTION_BLOCK SampleBlock
+VAR_INPUT Value : LREAL; END_VAR
+VAR_OUTPUT Result : LREAL; END_VAR
+Result := Value;
+END_FUNCTION_BLOCK
+FUNCTION UpdateValue : BOOL
+VAR_IN_OUT Value : DINT; END_VAR
+Value := Value + 1;
+UpdateValue := TRUE;
+END_FUNCTION

@@ -175,6 +175,8 @@ struct ScrollEvent {
     double pixelX = 0.0;
     double pixelY = 0.0;
 
+    KeyModifiers modifiers;
+
     bool active() const { return x != 0.0 || y != 0.0 || pixelX != 0.0 || pixelY != 0.0; }
 };
 

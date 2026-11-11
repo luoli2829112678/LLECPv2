@@ -45,8 +45,9 @@ class DataStream {
         if (filling_.empty())
             return;
         if (pending_.size() >= 64) {
-            dropped_ += pending_.front().at("frames").size();
-            pending_.pop_front();
+            dropped_ += filling_.size();
+            filling_=Json::array();bytes_=0;
+            return; // Never evict an unacknowledged batch.
         }
         pending_.push_back({{"type", DataCommand::Type},
                             {"session", session},

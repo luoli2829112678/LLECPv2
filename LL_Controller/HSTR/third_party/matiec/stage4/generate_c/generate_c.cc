@@ -866,7 +866,7 @@ class generate_c_pous_c {
       s4o.print("\n");
       s4o.print(s4o.indent_spaces);
       s4o.print(END_LABEL);
-      s4o.print(":\n");
+      s4o.print(":;\n"); // A label must precede a statement, including VOID functions.
       s4o.indent_right();
     }
   

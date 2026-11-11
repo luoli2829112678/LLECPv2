@@ -530,7 +530,7 @@ struct Runtime::Impl
         {
             return;
         }
-        location = {filename, line, depth, call != 0};
+        location = {filename, line, depth, call != 0, location.pauseCount + 1};
         stepMode = 0;
         resume = false;
         snapshot();

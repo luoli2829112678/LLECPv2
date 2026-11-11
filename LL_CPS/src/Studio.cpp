@@ -33,10 +33,10 @@ void Dirty() {
     Update();
 }
 void Page(std::string page) {
-    if (page == "hstr" && s.page != "hstr") {
+    if ((page == "hstr" || page == "scope" || page == "axis" || page == "logs") && s.page != "hstr" && s.page != "scope" && s.page != "axis" && s.page != "logs") {
         s.savedDebugPanel = s.debugPanel;
         s.debugPanel = false;
-    } else if (page != "hstr" && s.page == "hstr") {
+    } else if (page != "hstr" && page != "scope" && page != "axis" && page != "logs" && (s.page == "hstr" || s.page == "scope" || s.page == "axis" || s.page == "logs")) {
         s.debugPanel = s.savedDebugPanel;
     }
     s.page = std::move(page);
@@ -263,7 +263,25 @@ void Request(Json request, std::function<void(const Json &)> callback, bool quie
     if (!s.net)
         return;
     const auto op = request.value("op", "");
-    s.net->Request(std::move(request), [callback, quiet, op](const Json &r) {
+    const bool debugging=op==LL::CpsOp::Debug&&request.value("command",std::string{})!="event";
+    if(debugging&&s.debugPending)return;
+    const auto previousDebugStatus=debugging?s.status:Json::object();
+    if(debugging){s.debugPending=true;s.status["plcStatus"]=1;Update();}
+    const bool resetting=op==LL::CpsOp::Reset||op==LL::CpsOp::PlcReset||(op==LL::CpsOp::Axis&&request.value("command",std::string{})=="reset");
+    s.net->Request(std::move(request), [callback, quiet, op, resetting, debugging, previousDebugStatus](const Json &r) {
+        if(debugging){
+            s.debugPending=false;
+            if(r.value("ok",false)&&r.contains("plcStatus")){
+                s.status=r;
+                if(r.value("plcStatus",0)==3&&r.contains("location")){
+                    const auto& l=r["location"];
+                    const auto old=previousDebugStatus.value("location",Json::object());
+                    const bool same=l.value("file",std::string{})==old.value("file",std::string{})&&l.value("line",0u)==old.value("line",0u);
+                    Log(std::string(same?"继续执行后再次暂停于同一行：":"调试暂停：")+l.value("file",std::string{})+":"+std::to_string(l.value("line",0u))+" · 暂停次数 "+std::to_string(l.value("pauseCount",std::uint64_t{0})));
+                }else Log("调试已继续运行，等待下一个断点；逐行执行请使用步过");
+            }else if(!r.value("ok",false))s.status=previousDebugStatus;
+            s.poll=Clock::time_point{};
+        }
         if (!r.value("ok", false)) {
             if (r.value("transportError", false)) {
                 s.connected = false;
@@ -272,7 +290,14 @@ void Request(Json request, std::function<void(const Json &)> callback, bool quie
             if (!quiet)
                 OperationError(op + "  " + r.value("error", "操作失败"));
         } else if (!quiet)
-            Log(op + (r.value("accepted", false) ? "  已受理，等待轴状态反馈" : "  完成"));
+            Log(op + (r.value("alreadyRunning",false)?"  应用已在运行，未重复启动":r.value("building",false)?"  正在生成":r.value("accepted", false) ? "  已受理，等待轴状态反馈" : "  完成"));
+        if(op==LL::CpsOp::Run&&r.value("ok",false)&&r.contains("plcStatus")){
+            s.status["plcStatus"]=r["plcStatus"];if(s.operationError.rfind(LL::CpsOp::Run,0)==0)s.operationError.clear();
+        }
+        if(resetting&&r.value("ok",false)) {
+            s.resetFeedbackPending=true;s.resetFeedbackDeadline=Clock::now()+std::chrono::seconds(7);
+            Log("复位已受理，等待实际轴状态反馈");
+        }
         if (callback)
             callback(r);
         Update();
@@ -306,7 +331,8 @@ void Enter(Json project) {
         s.ip = s.project.value("controllerIp", "127.0.0.1");
     s.dirty = false;
     s.channels = s.project["scope"].value("channels", std::vector<std::string>{});
-    s.interval = std::to_string(s.project["scope"].value("intervalMs", 1));
+    s.interval = "1";
+    s.windowMs = std::to_string(s.project["scope"].value("windowMs", 10000));
     Page("overview");
 }
 void GuardUnsaved(std::function<void()> next) {
@@ -345,6 +371,7 @@ void Connect() {
             if (r.value("ok", false)) {
                 s.connected = true;
                 s.status = r;
+
                 s.lastStatus = Clock::now();
                 s.poll = Clock::now();
                 if (HasProject()) {
@@ -575,7 +602,7 @@ void ScopeSubscribe() {
     }
     if (!s.connected || s.channels.empty())
         return;
-    const int interval = std::stoi(s.interval);
+    const int interval = 1;
     if (interval < 1 || interval > 1000)
         throw std::runtime_error("采样周期范围 1..1000 ms");
     Request(
@@ -602,21 +629,20 @@ void ScopeSubscribe() {
         },
         true);
     if (HasProject()) {
-        s.project["scope"] = {{"intervalMs", interval}, {"channels", s.channels}};
+        s.project["scope"] = {{"intervalMs", interval}, {"windowMs", std::stoul(s.windowMs)}, {"channels", s.channels}};
         Dirty();
     }
 }
 void AxisCommand(const std::string &command) {
     if (!Axis() || !Master())
         return;
-    Request({{"op", LL::CpsOp::Axis},
-             {"master", (*Master())["id"]},
-             {"axis", (*Axis())["id"]},
-             {"command", command},
-             {"position", std::stod(s.target)},
-             {"velocity", std::stod(s.velocity)},
-             {"acceleration", std::stod(s.acceleration)},
-             {"jerk", std::stod(s.jerk)}});
+    Json request={{"op",LL::CpsOp::Axis},{"master",(*Master())["id"]},{"axis",(*Axis())["id"]},{"command",command}};
+    if(command=="absolute"||command=="relative"||command=="home"||command=="origin") {
+        request["position"]=std::stod(s.target);request["velocity"]=std::stod(s.velocity);
+        request["acceleration"]=std::stod(s.acceleration);request["jerk"]=std::stod(s.jerk);
+    }
+    Request(request);
+
 }
 static void DownloadFile(const std::string &token, const fs::path &path) {
     auto data = std::make_shared<std::string>();
@@ -698,15 +724,15 @@ void AddSource() {
         const auto kind = s.kind;
         std::string content;
         if (kind == "program")
-            content = "PROGRAM " + name + "\nVAR\nEND_VAR\n\nEND_PROGRAM\n";
+            content = "PROGRAM " + name + "\nVAR\n    Ready : BOOL := FALSE;\nEND_VAR\n\nReady := TRUE;\nEND_PROGRAM\n";
         else if (kind == "function")
             content = "FUNCTION " + name + " : DINT\nVAR_INPUT\n    Value : DINT;\nEND_VAR\n" + name +
                       " := Value;\nEND_FUNCTION\n";
         else if (kind == "fb")
             content = "FUNCTION_BLOCK " + name +
-                      "\nVAR_INPUT\nEND_VAR\nVAR_OUTPUT\nEND_VAR\n\nEND_FUNCTION_BLOCK\n";
+                      "\nVAR_INPUT\n    Enable : BOOL;\nEND_VAR\nVAR_OUTPUT\n    Ready : BOOL;\nEND_VAR\n\nReady := Enable;\nEND_FUNCTION_BLOCK\n";
         else if (kind == "gvl")
-            content = "VAR_GLOBAL\nEND_VAR\n";
+            content = "VAR_GLOBAL\n    Ready : BOOL := FALSE;\nEND_VAR\n";
         else if (kind == "type")
             content = "TYPE\n    " + name + " : STRUCT\n        Value : DINT;\n    END_STRUCT;\nEND_TYPE\n";
         else
@@ -792,19 +818,41 @@ void Tick() {
                     Log(r.value("diagnostics", r.value("error", "Build complete")));
                     if (r.value("succeeded", false))
                         Variables();
+                    else OperationError("HSTR生成失败，请在日志中查看或复制完整错误：\n"+r.value("diagnostics",r.value("error",std::string{})));
                 }
             },
             true);
     }
-    if (s.connected && !s.pendingPoll && !s.busy && now - s.poll > std::chrono::milliseconds(600)) {
+    if (s.connected && !s.pendingPoll && !s.busy && !s.debugPending && now - s.poll > std::chrono::milliseconds(600)) {
         s.pendingPoll = true;
         s.poll = now;
         Request(
             {{"op", LL::CpsOp::Status}},
             [](const Json &r) {
                 s.pendingPoll = false;
-                if (r.value("ok", false)) {
+                if (r.value("ok", false) && !s.debugPending) {
                     s.status = r;
+                    if(s.page=="hstr"&&r.value("plcStatus",0)==3&&r.contains("location")&&r["location"].value("line",0u)>0){
+                        const auto name=fs::u8path(r["location"].value("file","")).filename().u8string();
+                        const auto& files=s.project["hstr"]["files"];
+                        for(std::size_t i=0;i<files.size();++i)if(LL::SourceFilename(files[i])==name){
+                            if(s.source!=i){s.source=static_cast<int>(i);s.visibleSourceTab=-1;}s.pageScroll=0;
+                            const auto parts=LL::SplitST(files[i].value("content",""));
+                            const auto line=r["location"].value("line",0u);
+                            if(parts.split&&line<=static_cast<unsigned>(std::count(parts.declarations.begin(),parts.declarations.end(),'\n')))s.collapsedDeclarations.erase(files[i].value("name",""));
+                            else s.collapsedImplementations.erase(files[i].value("name",""));
+                            break;
+                        }
+                    }
+
+                    if(s.resetFeedbackPending) {
+                        bool recovered=!r.value("controllerError",false)&&r.value("commandError",std::string{}).empty()&&r.value("plcStatus",0)!=2;
+                        for(const auto& axis:r.value("axes",Json::array()))
+                            if(axis.value("error",false)||(axis.value("statusWord",0u)&8)||axis.value("stateName",std::string{})=="错误停止")recovered=false;
+                        if(recovered){s.resetFeedbackPending=false;s.operationError.clear();if(s.modal=="error")s.modal.clear();Log("复位完成：轴故障状态已清除");}
+                        else if(Clock::now()>s.resetFeedbackDeadline){s.resetFeedbackPending=false;OperationError("复位未完成，请检查轴状态字、驱动器故障及从站OP状态");}
+                    }
+
                     s.lastStatus = Clock::now();
                 }
             },

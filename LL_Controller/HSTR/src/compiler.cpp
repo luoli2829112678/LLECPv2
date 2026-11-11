@@ -527,7 +527,9 @@ BOOL __DEBUG = 0;
 #include "LOCATED_VARIABLES.h"
 #undef __LOCATED_VAR
 #include "HSTRCONFIG.c"
+#undef GLOBAL_CAST
 #include "HSTRRESOURCE.c"
+#undef GLOBAL_CAST
 )C";
     std::vector<std::vector<std::string>> vars;
     bool section = false;

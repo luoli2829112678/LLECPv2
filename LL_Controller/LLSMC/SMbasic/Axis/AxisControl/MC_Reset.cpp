@@ -47,7 +47,6 @@ void MC_Reset::Execute()
     uint16_t nControlWord = 0;
     uint16_t nStatusWord = 0;
     bool statuswordCheck = (m_pCIA402Axis->m_stMirrorPDO.StatusWord & en_StatusWord_f) != 0;
-    bool errorcodeCheck = m_pCIA402Axis->m_stMirrorPDO.ErrorCode != 0;
     m_pCIA402Axis->Axis_PDO_ReadStatusWord(nStatusWord);
     m_pCIA402Axis->Axis_PDO_ReadControlword(nControlWord);
     m_bBusy = false;
@@ -65,8 +64,11 @@ void MC_Reset::Execute()
     case ReadyReset:
         if(m_Timer.R_TRIG(m_bExecute))
         {
-            if(m_pCIA402Axis->Axis_GetVirtualState())
+            m_pCIA402Axis->CleanSoftMotionData();
+            if(m_pCIA402Axis->Axis_GetVirtualState() && !m_pCIA402Axis->Axis_PDOErrorCheck())
             {
+                m_pCIA402Axis->Axis_ResetError();
+                m_pCIA402Axis->Axis_SetAxisState(EN_AxisMotionState::motionState_power_off);
                 m_bDone = true;
                 m_fsReset = ResetFinish;
                 m_Timer.Ton(false, SMC_TIME_OUT);
@@ -107,7 +109,7 @@ void MC_Reset::Execute()
             m_fsReset = ResetError;
             break;
         }
-        if((!errorcodeCheck)&&(!statuswordCheck))
+        if(!statuswordCheck)
         {
             m_pCIA402Axis->Axis_ResetError();
             m_bDone = true;

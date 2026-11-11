@@ -33,12 +33,21 @@ void compose(eui::Ui &ui, const eui::Screen &screen) {
         .content([&] {
             Rect(ui, "background", 0, 0, w, h, bg);
             Rect(ui, "menubar", 0, 0, w, 54, panel);
-            Text(ui, "brand", "LL / CPS", 20, 14, 165, 28, 20, cyan);
-            const std::vector<std::string> menus = {"文件", "生成", "PLC", "调试", "工具"};
-            for (std::size_t i = 0; i < menus.size(); ++i)
-                Button(
-                    ui, "top." + menus[i], menus[i], 211 + i * 67, 11, 60,
-                    [menu = menus[i]] { s.menu = s.menu == menu ? "" : menu; }, true, s.menu == menus[i]);
+            Text(ui, "brand", "LL / CPS", 20, 14, 132, 28, 18, cyan);
+            const std::vector<std::string> menus = {"文件", "生成", "PLC", "调试", "工具", "日志"};
+            for (std::size_t i = 0; i < menus.size(); ++i) {
+                const auto label=menus[i];
+                const bool open=s.menu==label||(label=="日志"&&s.page=="logs");
+                components::ButtonStyle style(components::theme::light(),false);
+                style.normal=open?eui::Color{.86f,.93f,.99f,1}:eui::Color{.93f,.95f,.97f,1};
+                style.hover={.86f,.93f,.99f,1};style.pressed={.80f,.89f,.97f,1};
+                style.text=fg;style.radius=4;style.pressScale=1;
+                style.border.width=1;style.border.color=open?eui::Color{.55f,.72f,.88f,1}:line;
+                style.shadow.blur=5;style.shadow.spread=0;
+                components::button(ui,"top."+label).position(MenuStartX+i*MenuStep,MenuTop)
+                    .size(MenuWidth,MenuHeight).fontSize(12).text(label).style(style)
+                    .onClick([label]{if(label=="日志")Page("logs");else s.menu=s.menu==label?"":label;Update();}).build();
+            }
             Button(
                 ui, "connect", s.connected ? "已连接  " + s.ip : "连接控制器", w - 255, 11, 230,
                 [] { Connect(); }, HasProject() && !s.busy, s.connected);
@@ -117,7 +126,7 @@ void compose(eui::Ui &ui, const eui::Screen &screen) {
                 .size(w - nav - 1, mainH)
                 .clip()
                 .onScroll([](const core::ScrollEvent &e) {
-                    if (s.page != "hstr" && s.page != "scope")
+                    if (s.page != "hstr" && s.page != "scope" && s.page != "logs")
                         s.pageScroll = std::max(0.0f, s.pageScroll - static_cast<float>(e.y) * 38);
                     Update();
                 })
@@ -127,7 +136,9 @@ void compose(eui::Ui &ui, const eui::Screen &screen) {
                         .size(w - nav - 1, std::max(mainH, 4000.0f))
                         .content([&] {
                             const auto pw = w - nav - 1;
-                            if (s.page == "projects")
+                            if (s.page == "logs")
+                                LogsPage(ui,pw,mainH);
+                            else if (s.page == "projects")
                                 ProjectPage(ui, pw, mainH);
                             else if (s.page == "devices")
                                 DevicesPage(ui, pw, mainH);

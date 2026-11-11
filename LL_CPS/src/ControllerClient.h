@@ -39,6 +39,7 @@ class ControllerClient {
         std::string ip;
         Json request;
         Callback callback;
+        std::uint64_t generation = 0;
     };
     void Work();
     void Receive();
@@ -48,6 +49,7 @@ class ControllerClient {
     std::deque<std::function<void()>> done_;
     std::vector<ScopeSample> samples_;
     std::string ip_ = "127.0.0.1";
+    std::uint64_t endpointGeneration_ = 0;
     std::atomic<bool> stop_{false};
     std::thread worker_, receiver_;
     std::intptr_t udp_ = -1;

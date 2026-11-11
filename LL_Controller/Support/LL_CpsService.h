@@ -25,6 +25,7 @@ class LL_CpsService {
         axisIndex_.clear();
         axisMaster_.clear();
         readyAxes_.clear();
+        axisFaults_.clear();resettingAxes_.clear();
         virtualPdos_.clear();
     }
     int ResolveAxis(int id) const {
@@ -69,6 +70,7 @@ class LL_CpsService {
     Json Pdo(const Json& request, bool write);
     void RefreshReadyAxes();
     void Neutralize(int);
+    void FaultAxis(int,const std::string&);
     void Apply(const Json &);
     void Prepare();
     void Download(const Json &);
@@ -87,6 +89,8 @@ class LL_CpsService {
     std::map<int, int> axisIndex_;
     std::map<int, std::string> axisMaster_;
     std::set<int> readyAxes_;
+    std::map<int,std::string> axisFaults_;
+    std::set<int> resettingAxes_;
     struct VirtualPdoImage {std::vector<std::uint8_t> rx,tx;};
     std::map<std::string,VirtualPdoImage> virtualPdos_;
     std::map<std::string, std::vector<std::uint8_t>> forces_;

@@ -4,6 +4,8 @@
 #include "ESI_Parse.h"
 #include "LL_DataStream.h"
 #include "LL_ScopePlot.h"
+#include "LL_ScopeFFT.h"
+#include "LL_STEditor.h"
 #include <iostream>
 #include <cmath>
 #include <functional>
@@ -26,6 +28,27 @@ static void rejects(std::function<void()> f) {
 int main() {
     auto root = fs::temp_directory_path() / NewId("llcps_test");
     try {
+        for (const auto &source : std::vector<std::string>{
+                 "PROGRAM Main\nVAR\n A : DINT;\nEND_VAR\nA := 1;\nEND_PROGRAM\n",
+                 "FUNCTION F : DINT\nVAR_INPUT\n V : DINT;\nEND_VAR\nF := V;\nEND_FUNCTION\n",
+                 "FUNCTION_BLOCK F\nVAR_INPUT\n V : BOOL;\nEND_VAR\nVAR_OUTPUT\n R : BOOL;\nEND_VAR\n(* "
+                 "END_VAR (* PROGRAM *) *)\nR := V;\nEND_FUNCTION_BLOCK\n",
+                 "PROGRAM P\nVAR\n S : STRING := 'END_VAR';\nEND_VAR\nS := 'END_PROGRAM';\nEND_PROGRAM\n",
+                 "FUNCTION F : DINT\r\nF := 1;\r\nEND_FUNCTION\r\n"}) {
+            const auto parts = SplitST(source);
+            check(parts.split);
+            check(parts.Join() == source);
+            check(!parts.body.empty());
+        }
+        check(!SplitST("VAR_GLOBAL\nX : DINT;\nEND_VAR\n").split);
+        std::vector<double> sine(1024);
+        for (std::size_t i = 0; i < sine.size(); ++i)
+            sine[i] = 5 + 2 * std::sin(6.283185307179586 * 50 * i / 1024);
+        const auto spectrum = ScopeFFT(sine, 1024);
+        const auto peak = std::max_element(spectrum.begin(), spectrum.end(),
+                                           [](const auto &a, const auto &b) { return a.second < b.second; });
+        check(peak->first == 50 && std::abs(peak->second - 2) < .01);
+        rejects([&] { ScopeFFT(sine, 0); });
         DataStream stream("queue_test");
         for (int i = 0; i < 100; ++i)
             stream.Push({{"sequence", i + 1},
@@ -40,7 +63,7 @@ int main() {
         for (int i = 0; i < 6600; ++i)
             stream.Push({{"sequence", i + 101}});
         batch = stream.Peek();
-        check(batch.at("batch") == 4 && batch.at("droppedSamples") == 200);
+        check(batch.at("batch") == 2 && batch.at("droppedSamples") == 200);
         check(stream.Peek().at("frames") == batch.at("frames"));
         DataStream tail("tail_test");
         tail.Push({{"sequence", 1}});

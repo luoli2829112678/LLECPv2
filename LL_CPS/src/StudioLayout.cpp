@@ -14,7 +14,7 @@ void Navigation(eui::Ui &ui, float width, float height) {
         Text(ui, "files.count", "源文件  ·  " + std::to_string(files.size()), 18, 166, width - 36, 23, 12,
              muted);
         const float listH = std::max(100.0f, height - 202);
-        const float limit = std::max(0.0f, files.size() * 32.0f - listH);
+        const float limit = std::max(0.0f, files.size() * 32.0f + 4*28.0f - listH);
         s.fileScroll = std::clamp(s.fileScroll, 0.0f, limit);
         ui.stack("files.list")
             .position(8, 197)
@@ -25,13 +25,20 @@ void Navigation(eui::Ui &ui, float width, float height) {
                 Update();
             })
             .content([&] {
-                for (std::size_t i = 0; i < files.size(); ++i) {
-                    const float y = i * 32.0f - s.fileScroll;
-                    if (y + 32 < 0 || y > listH)
-                        continue;
-                    FileItem(ui, "files.row" + std::to_string(i), files[i], 0, y, width - 16, 31,
-                             s.source == i, [i] { s.source = static_cast<int>(i); });
+                float y=-s.fileScroll;
+                const std::vector<std::pair<std::string,std::string>> groups={{"pou","POUs / 程序与功能块"},{"gvl","GVLs / 全局变量"},{"type","数据类型"},{"task","PLCTasks / 任务配置"}};
+                for(const auto& group:groups){
+                    const auto key=group.first;
+                    Button(ui,"files.folder."+key,(s.closedFolders.count(key)?">  ":"▾  ")+group.second,0,y,width-16,[key]{if(s.closedFolders.count(key))s.closedFolders.erase(key);else s.closedFolders.insert(key);},true,false,26);y+=28;
+                    if(s.closedFolders.count(key))continue;
+                    for(std::size_t i=0;i<files.size();++i){
+                        const auto kind=files[i].value("kind","");
+                        if((key=="pou"&&(kind=="gvl"||kind=="type"||kind=="task"))||(key!="pou"&&kind!=key))continue;
+                        if(y+32>=0&&y<=listH)FileItem(ui,"files.row"+std::to_string(i),files[i],12,y,width-28,31,s.source==i,[i]{s.source=static_cast<int>(i);s.listScroll=s.taskProgramScroll=0;});
+                        y+=32;
+                    }
                 }
+
             })
             .build();
         return;
@@ -115,11 +122,7 @@ void MenuOverlay(eui::Ui &ui) {
     if (s.menu.empty())
         return;
     const auto menu = s.menu;
-    float x = 211 + (menu == "文件"   ? 0
-                     : menu == "生成" ? 67
-                     : menu == "PLC"  ? 134
-                     : menu == "调试" ? 201
-                                      : 268);
+    const float x=MenuStartX+MenuStep*(menu=="文件"?0:menu=="生成"?1:menu=="PLC"?2:menu=="调试"?3:4);
     std::vector<std::pair<std::string, std::function<void()>>> actions;
     if (menu == "文件")
         actions = {{"新建项目…",
@@ -158,7 +161,7 @@ void MenuOverlay(eui::Ui &ui) {
                         s.debugPanel = true;
                         s.bottomTab = 0;
                     }},
-                   {"调试运行", [] { Request({{"op", LL::CpsOp::Run}, {"debug", true}}); }},
+                   {"调试运行", [] { StartHstr(true); }},
                    {"继续", [] { Request({{"op", LL::CpsOp::Debug}, {"command", "continue"}}); }},
                    {"单步步过", [] { Request({{"op", LL::CpsOp::Debug}, {"command", "over"}}); }},
                    {"单步进入", [] { Request({{"op", LL::CpsOp::Debug}, {"command", "into"}}); }}};
@@ -172,7 +175,7 @@ void MenuOverlay(eui::Ui &ui) {
                             s.repo->Root().u8string(), [](const std::string &) {});
                     }}};
     ui.stack("menu.overlay")
-        .position(x, 48)
+        .position(x, MenuTop+MenuHeight+4)
         .size(245, static_cast<float>(actions.size() * 40 + 14))
         .zIndex(100)
         .content([&] {
@@ -211,7 +214,10 @@ void Modal(eui::Ui &ui, float w, float h) {
                 .clip()
                 .content([&] {
                     Rect(ui, "modal.panel", 0, 0, mw, mh, panel, 10);
-                    Text(ui, "modal.title", s.modal.rfind("variables", 0) == 0 ? "搜索并选择变量" : s.title,
+                    Text(ui, "modal.title",
+                         s.modal == "variables.scope"         ? "添加示波器通道"
+                         : s.modal.rfind("variables", 0) == 0 ? "搜索并选择变量"
+                                                              : s.title,
                          26, 22, mw - 100, 35, 21);
                     Button(ui, "modal.x", "×", mw - 60, 20, 35, [] { s.modal.clear(); });
                     if (s.modal == "error") {
@@ -223,13 +229,68 @@ void Modal(eui::Ui &ui, float w, float h) {
                         return;
                     }
                     if (s.modal.rfind("variables", 0) == 0) {
-                        Input(ui, "variable.search", s.search, 26, 75, mw - 52, [](const std::string &v) {
-                            s.search = v;
-                            s.listScroll = 0;
-                        });
+                        const bool scopePicker = s.modal == "variables.scope";
+                        auto isAxis = [](const Json &variable) {
+                            return variable.value("source", std::string{}) == "Axis" ||
+                                   variable.value("name", std::string{}).rfind("Axis.", 0) == 0;
+                        };
+                        if (scopePicker) {
+                            const auto axes = std::count_if(s.variables.begin(), s.variables.end(), isAxis);
+                            Button(
+                                ui, "scope.pick.axis", "轴数据 (" + std::to_string(axes) + ")", 26, 72, 156,
+                                [] {
+                                    s.scopePickAxis = true;
+                                    s.search.clear();
+                                    s.listScroll = 0;
+                                },
+                                true, s.scopePickAxis);
+                            Button(
+                                ui, "scope.pick.hstr",
+                                "HSTR 变量 (" + std::to_string(s.variables.size() - axes) + ")", 194, 72, 176,
+                                [] {
+                                    s.scopePickAxis = false;
+                                    s.search.clear();
+                                    s.listScroll = 0;
+                                },
+                                true, !s.scopePickAxis);
+                        }
+                        Input(ui, "variable.search", s.search, 26, scopePicker ? 119 : 75, mw - 52,
+                              [](const std::string &v) {
+                                  s.search = v;
+                                  s.listScroll = 0;
+                              });
+                        const float listTop = scopePicker ? 168 : 124, listHeight = mh - listTop - 43;
+                        std::vector<Json> options;
+                        for (const auto &variable : s.variables) {
+                            if (scopePicker && isAxis(variable) != s.scopePickAxis)
+                                continue;
+                            const auto name = variable.value("name", std::string{});
+                            auto match = name + " " + variable.value("displayName", name) + " " +
+                                         variable.value("source", std::string{}) + " " +
+                                         variable.value("master", std::string{});
+                            auto query = s.search;
+                            auto lower = [](unsigned char c) { return static_cast<char>(std::tolower(c)); };
+                            std::transform(match.begin(), match.end(), match.begin(), lower);
+                            std::transform(query.begin(), query.end(), query.begin(), lower);
+                            if (match.find(query) != std::string::npos)
+                                options.push_back(variable);
+                        }
+                        s.listScroll =
+                            std::clamp(s.listScroll, 0.0f,
+                                       std::max(0.0f, static_cast<float>(options.size()) * 39 - listHeight));
+                        if (options.empty())
+                            Text(ui, "variable.empty",
+                                 !s.search.empty()                ? "没有匹配的数据"
+                                 : scopePicker && s.scopePickAxis ? "暂无轴数据，请确认主站已启动且轴已注册"
+                                                                  : "暂无 HSTR 变量，请先生成并下载程序",
+                                 26, listTop + 16, mw - 52, 40, 14, muted);
+                        Text(ui, "variable.count",
+                             "共 " + std::to_string(options.size()) + " 项" +
+                                 (scopePicker ? " · 轴数据和 HSTR 变量可混合添加到同一张波形图" : ""),
+                             26, mh - 36, mw - 52, 24, 12, muted);
                         ui.stack("variable.rows")
-                            .position(20, 124)
-                            .size(mw - 40, mh - 145)
+                            .position(20, listTop)
+                            .size(mw - 40, listHeight)
                             .clip()
                             .onScroll([](const core::ScrollEvent &e) {
                                 s.listScroll = std::max(0.0f, s.listScroll - static_cast<float>(e.y) * 34);
@@ -237,24 +298,14 @@ void Modal(eui::Ui &ui, float w, float h) {
                             })
                             .content([&] {
                                 float y = -s.listScroll;
-                                for (const auto &variable : s.variables) {
+                                for (const auto &variable : options) {
                                     const auto name = variable.value("name", "");
                                     const auto display = variable.value("displayName", name);
-                                    auto match = name + " " + display + " " +
-                                                 variable.value("source", std::string{}) + " " +
-                                                 variable.value("master", std::string{}),
-                                         query = s.search;
-                                    auto lower = [](unsigned char c) {
-                                        return static_cast<char>(std::tolower(c));
-                                    };
-                                    std::transform(match.begin(), match.end(), match.begin(), lower);
-                                    std::transform(query.begin(), query.end(), query.begin(), lower);
-                                    if (match.find(query) == std::string::npos)
-                                        continue;
                                     Button(
                                         ui, "var." + name,
-                                        display + "   ·   " + name + "   " + variable.value("type", ""), 6, y,
-                                        mw - 64,
+                                        (display == name ? name : display + "   ·   " + name) + "   " +
+                                            variable.value("type", ""),
+                                        6, y, mw - 64,
                                         [name] {
                                             if (s.modal == "variables.scope") {
                                                 if (std::find(s.channels.begin(), s.channels.end(), name) ==

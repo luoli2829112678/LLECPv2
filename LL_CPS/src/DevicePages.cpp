@@ -486,17 +486,23 @@ void AxisPage(eui::Ui &ui, float w, float) {
     if (!a || !Slave())
         return;
     Heading(ui, "axis", a->value("name", "Axis"), "CiA 402 / 映射与调试", w);
-    Field(ui, "axis.name", "轴名称", *a, "name", 24, 122, 220);
-    Field(ui, "axis.slot", "轴通道（0起）", *a, "slot", 260, 122, 140);
+    const std::vector<std::string> tabs={"轴映射","轴参数","轴调试"};
+    for(std::size_t i=0;i<tabs.size();++i){
+        Button(ui,"axis.tab."+std::to_string(i),tabs[i],24+i*150,122,138,[i]{s.axisTab=static_cast<int>(i);s.pageScroll=0;s.drafts.clear();},true,s.axisTab==i,34);
+    }
+    Rect(ui,"axis.tabs.line",24,162,w-48,1,line);
+    if(s.axisTab==0){
+    Field(ui, "axis.name", "轴名称", *a, "name", 24, 174, 220);
+    Field(ui, "axis.slot", "轴通道（0起）", *a, "slot", 260, 174, 140);
     Toggle(
-        ui, "axis.enabled", "注册轴", a->value("enabled", false), 420, 147,
+        ui, "axis.enabled", "注册轴", a->value("enabled", false), 420, 199,
         [](bool v) {
             (*Axis())["enabled"] = v;
             Dirty();
         },
         !AnyRunning() && !s.busy, 120);
     Button(
-        ui, "axis.autobind", "自动映射 PDO", 552, 147, 140,
+        ui, "axis.autobind", "自动映射 PDO", 552, 199, 140,
         [] {
             LL::AutoMapAxis(*Axis(), *Slave());
             Log("PDO自动映射完成；缺失或重复的对象保留为空，请检查映射表。");
@@ -504,7 +510,7 @@ void AxisPage(eui::Ui &ui, float w, float) {
         },
         !AnyRunning() && !s.busy);
     Button(
-        ui, "axis.remove", "删除轴", 704, 147, 100,
+        ui, "axis.remove", "删除轴", 704, 199, 100,
         [] {
             (*Slave())["axes"].erase(s.axis);
             s.axis = -1;
@@ -512,7 +518,9 @@ void AxisPage(eui::Ui &ui, float w, float) {
             Page("slave");
         },
         !AnyRunning() && !s.busy);
+    }
     auto live = AxisStatus(a->at("id"));
+    if(s.axisTab==2){
     Text(ui, "axis.live.title", "实时轴状态", 24, 195, w - 48, 29, 18);
     auto number = [&](const char *key) {
         return live.empty() ? std::string("—") : Number(live.value(key, 0.0));
@@ -553,10 +561,13 @@ void AxisPage(eui::Ui &ui, float w, float) {
              (i == 0 || i == 4 || i == 5) && live.value("error", false) ? red : fg);
         Rect(ui, id + ".line", x, ry + 35, pair, 1, line);
     }
-    float y = 501;
+    }
+    int n=0;
+    float y=245;
+    if(s.axisTab==0){
     Text(ui, "mapping.head", "PDO 映射 / 未匹配的字段保持为空；点击字段手动选择", 24, y, w - 48, 30, 16);
     y += 42;
-    int n = 0;
+    n = 0;
     for (const auto &field : LL::AxisFields()) {
         const auto mapping = (*a)["mapping"][field.name];
         const std::string label = std::string(field.label) + "  " +
@@ -577,7 +588,9 @@ void AxisPage(eui::Ui &ui, float w, float) {
             !AnyRunning() && !s.busy, !mapping.is_null());
         ++n;
     }
-    y += ((n + 1) / 2) * 40 + 26;
+    }
+    if(s.axisTab==1){
+    y=180;
     Text(ui, "axis.params", "轴参数", 24, y, w - 48, 28, 19);
     y += 43;
     n = 0;
@@ -600,7 +613,9 @@ void AxisPage(eui::Ui &ui, float w, float) {
               24 + (n % 3) * ((w - 64) / 3 + 8), y + (n / 3) * 78, (w - 80) / 3);
         ++n;
     }
-    y += ((n + 2) / 3) * 78 + 25;
+    }
+    if(s.axisTab!=2)return;
+    y=501;
     Text(ui, "axis.debug", "轴调试", 24, y, w - 48, 30, 19);
     y += 40;
     const auto prefix = "Axis." + std::to_string(a->value("id", 0)) + ".";
@@ -635,15 +650,18 @@ void AxisPage(eui::Ui &ui, float w, float) {
         },
         s.connected && live.value("available", false));
     y += 45;
-    Input(ui, "motion.pos", s.target, 24, y, 150, [](const std::string &v) { s.target = v; });
-    Input(ui, "motion.vel", s.velocity, 190, y, 150, [](const std::string &v) { s.velocity = v; });
-    Input(ui, "motion.acc", s.acceleration, 356, y, 150, [](const std::string &v) { s.acceleration = v; });
-    Input(ui, "motion.jerk", s.jerk, 522, y, 150, [](const std::string &v) { s.jerk = v; });
-    y += 38;
-    Text(ui, "motion.labels",
-         "目标位置                     速度                          加速度                       加加速度",
-         24, y, w - 48, 24, 12, muted);
-    y += 36;
+    const float columnGap=16,columnWidth=std::min(210.0f,(w-48-3*columnGap)/4);
+    const std::vector<std::string> labels={"目标位置","速度","加速度","加加速度"};
+    const std::vector<std::string> keys={"pos","vel","acc","jerk"};
+    const std::vector<std::string> values={s.target,s.velocity,s.acceleration,s.jerk};
+    for(std::size_t col=0;col<labels.size();++col){
+        const float x=24+col*(columnWidth+columnGap);
+        Text(ui,"motion.label."+keys[col],labels[col],x,y,columnWidth,22,13,muted);
+        Input(ui,"motion."+keys[col],values[col],x,y+26,columnWidth,[col](const std::string& value){
+            if(col==0)s.target=value;else if(col==1)s.velocity=value;else if(col==2)s.acceleration=value;else s.jerk=value;
+        });
+    }
+    y+=78;
     const bool enabled = Running() && live.value("available", false) && a->value("enabled", false) &&
                          !s.status.value("emergency", false);
     n = 0;
@@ -656,7 +674,7 @@ void AxisPage(eui::Ui &ui, float w, float) {
                                                                                 {"origin", "设置原点"},
                                                                                 {"stop", "停止"}}) {
         Button(
-            ui, "axis.command." + command.first, command.second, 24 + (n % 4) * 150, y + (n / 4) * 44, 135,
+            ui, "axis.command." + command.first, command.second, 24 + (n % 4) * (columnWidth+columnGap), y + (n / 4) * 44, columnWidth,
             [cmd = command.first] { AxisCommand(cmd); }, enabled, command.first == "stop");
         ++n;
     }

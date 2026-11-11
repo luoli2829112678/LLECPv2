@@ -414,12 +414,23 @@ void LL_CpsService::Neutralize(int i) {
     c->m_enAxisContinuousStepMoveFSM[i] = 0;
     c->m_enAxisVelocityMoveFSM[i] = 0;
 }
+void LL_CpsService::FaultAxis(int id,const std::string& reason) {
+    if(!axisIndex_.count(id))return;
+    axisFaults_.emplace(id,reason);
+    const int i=axisIndex_.at(id);
+    Neutralize(i); // Discard this axis's trajectory and every pending command.
+    auto* axis=LLCRbt->m_vAxis.at(i);
+    axis->Axis_PDO_SetControlword(2); // CiA402 quick stop; do not disable other axes.
+    axis->PDO_SetControlword(2);
+    axis->Axis_SetAxisState(motionState_errorstop);
+}
 void LL_CpsService::StopMaster(const std::string &id) {
     for (const auto &axis : axisMaster_)
         if (axis.second == id) {
             const int i = axisIndex_.at(axis.first);
             Neutralize(i);
             readyAxes_.erase(axis.first);
+            axisFaults_.erase(axis.first);resettingAxes_.erase(axis.first);
         }
     if (simulation_.count(id))
         simulation_[id] = false;
@@ -472,7 +483,7 @@ Json LL_CpsService::Status() {
              {"slaves", slaves}});
     }
     const char* stateNames[]={"未使能","错误停止","停止中","静止就绪","定位运动","连续运动","同步运动","回零中"};
-    for(const auto& entry:axisIndex_){auto* axis=c->m_vAxis.at(entry.second);const int state=static_cast<int>(axis->Axis_GetAxisMotionState());axes.push_back({{"id",entry.first},{"master",axisMaster_.at(entry.first)},{"state",state},{"stateName",state>=0&&state<8?stateNames[state]:"未知"},{"available",readyAxes_.count(entry.first)!=0},{"enabled",(axis->Axis_GetStatusWord()&0x6f)==0x27},{"moving",axis->Axis_GetMovingState()},{"error",axis->Axis_GetErrorState()},{"errorCode",axis->Axis_GetAxisErrorID()},{"statusWord",axis->Axis_GetStatusWord()},{"controlWord",axis->Axis_GetControlWord()},{"actualPosition",axis->Axis_GetActualPosition()},{"actualVelocity",axis->Axis_GetActualVelocity()},{"actualTorque",axis->Axis_GetActualTorque()},{"mode",axis->Axis_GetActualOperationMode()}});}
+    for(const auto& entry:axisIndex_){auto* axis=c->m_vAxis.at(entry.second);const int state=static_cast<int>(axis->Axis_GetAxisMotionState());axes.push_back({{"id",entry.first},{"master",axisMaster_.at(entry.first)},{"state",state},{"stateName",state>=0&&state<8?stateNames[state]:"未知"},{"available",readyAxes_.count(entry.first)!=0},{"enabled",(axis->Axis_GetStatusWord()&0x6f)==0x27},{"moving",axis->Axis_GetMovingState()},{"error",axis->Axis_GetErrorState()||axisFaults_.count(entry.first)!=0},{"faultReason",axisFaults_.count(entry.first)?axisFaults_.at(entry.first):""},{"errorCode",axis->Axis_GetAxisErrorID()},{"statusWord",axis->Axis_GetStatusWord()},{"controlWord",axis->Axis_GetControlWord()},{"actualPosition",axis->Axis_GetActualPosition()},{"actualVelocity",axis->Axis_GetActualVelocity()},{"actualTorque",axis->Axis_GetActualTorque()},{"mode",axis->Axis_GetActualOperationMode()}});}
     if (!buildJob_.valid())
         for (auto &t : c->HSTR_GetTaskStatistics())
             tasks.push_back({{"name", t.name},
@@ -494,7 +505,8 @@ Json LL_CpsService::Status() {
             {"axes",axes},
             {"tasks", tasks},
             {"location",
-             {{"file", location.file}, {"line", location.line}, {"canStepInto", location.canStepInto}}},
+             {{"file", location.file}, {"line", location.line}, {"canStepInto", location.canStepInto},
+              {"pauseCount", location.pauseCount}}},
             {"lastError", buildJob_.valid() ? "" : c->HSTR_GetLastError()}};
 }
 Json LL_CpsService::Variables() {
@@ -664,6 +676,19 @@ void LL_CpsService::AfterCycle() {
             if (!readyAxes_.count(a.first))
                 Neutralize(axisIndex_.at(a.first));
     Forces();
+    for(const auto& entry:axisIndex_){
+        const int id=entry.first,i=entry.second;auto* axis=LLCRbt->m_vAxis.at(i);
+        if(!readyAxes_.count(id))continue;
+        if(resettingAxes_.count(id)){
+            if(!LLCRbt->bAxisResetCmd[i]&&LLCRbt->m_enAxisResetFSM[i]==EN_AxisControlFSM::enAxisControlFSM_Null&&axis->Axis_GetAxisMotionState()!=motionState_errorstop&&!axis->Axis_GetErrorState()&&!(axis->Axis_GetStatusWord()&8)){
+                axisFaults_.erase(id);resettingAxes_.erase(id);continue;
+            }
+            if(LLCRbt->bAxisResetCmd[i]||LLCRbt->m_enAxisResetFSM[i]!=EN_AxisControlFSM::enAxisControlFSM_Null)continue;
+            resettingAxes_.erase(id);
+        }
+        if(axisFaults_.count(id)||axis->Axis_GetErrorState()||(axis->Axis_GetStatusWord()&8)||axis->Axis_GetAxisMotionState()==motionState_errorstop)
+            FaultAxis(id,axisFaults_.count(id)?axisFaults_.at(id):"轴运行故障");
+    }
     // AxisControlFSM/HSTR update command mirrors after SoftMotion's earlier PDO sync.
     for(const int id:readyAxes_)LLCRbt->m_vAxis.at(axisIndex_.at(id))->PDOsynchronization();
     if(Attached())for(const auto& master:LLCRbt->m_masters.List())
@@ -676,17 +701,17 @@ void LL_CpsService::AfterCycle() {
             it = subscriptions_.erase(it);
             continue;
         }
-        if (now >= sub.next) {
+        if ((sub.stream && sub.intervalMs == 1) || now >= sub.next) {
             const auto period=std::chrono::milliseconds(sub.intervalMs);
-            const auto missed=(now-sub.next)/period;
-            sub.next+=(missed+1)*period;
+            const auto missed=now>sub.next?(now-sub.next)/period:0;
+            if(sub.stream&&sub.intervalMs==1)sub.next=now+period;else sub.next+=(missed+1)*period;
             if(sub.stream) {
                 Json values=Json::object();
                 for(std::size_t channel=0;channel<sub.channels.size();++channel){const auto& name=sub.channels[channel];try {
                     if(buildJob_.valid())values[name]={{"error","编译期间暂停采样"}};
                     else values[name]=ReadResolved(sub.metadata.at(channel));
                 }catch(const std::exception& error){values[name]={{"error",error.what()}};}}
-                sub.sequence+=static_cast<std::uint64_t>(missed);
+                // Sequence numbers identify captured samples, not nominal timer slots.
                 sub.missedSamples+=static_cast<std::uint64_t>(missed);
                 sub.stream->Push({{"sequence",++sub.sequence},{"missedSamples",sub.missedSamples},{"timestamp_us",std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count()},{"values",std::move(values)}});
                 ++it;continue;

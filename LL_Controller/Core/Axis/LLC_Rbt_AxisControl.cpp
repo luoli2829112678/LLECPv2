@@ -244,6 +244,11 @@ void LLC_Rbt::AxisResetFSM()
             m_FB_AxisReset[i](m_vAxis[i],true,bBusy,bDone,bError,nErrorID);
             if(bDone)
             {
+                bool anyError=false;
+                for(auto* axis:m_vAxis)if(axis && (axis->Axis_GetErrorState()||axis->Axis_GetAxisMotionState()==motionState_errorstop))anyError=true;
+                m_stRobotControlStatus.bStatus_AxisError=anyError;
+                if(!anyError && m_stShmRobotRTStatus.nErrorAxisID==i)m_stShmRobotRTStatus.nErrorID=0;
+
                 m_FB_AxisReset[i](m_vAxis[i],false,bBusy,bDone,bError,nErrorID);
                 m_TonReset[i].Ton(false,TimeOut);
                 m_enAxisResetFSM[i] = EN_AxisControlFSM::enAxisControlFSM_Null;

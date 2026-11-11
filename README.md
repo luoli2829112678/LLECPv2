@@ -12,6 +12,8 @@
 
 生产程序为 `LL_Controller` 和 `LL_CPS`。Linux 服务器默认仅构建控制器，图形端需显式开启 `-DLLECP_BUILD_CPS=ON`；Windows 默认构建 CPS。Linux 程序、动态库和静态库统一生成到 `/usr/local/bin/LLECT`，程序通过 `$ORIGIN` 查找同目录动态库，避开 `/mnt` 的挂载执行限制。
 
+Windows 前端直接打开 `LL_CPS/LL_CPS.sln`，选择 x64 / Release 或 Debug 生成。该解决方案与 `LL_CPS.vcxproj` 保存在源码目录；`build` 只存可重新生成的缓存和产物，可整体删除，下一次生成会自动重建。工程项目与 ESI 保存在独立数据目录，不应放进 build。
+
 在 Linux 上，需要 CMake 3.20+、C/C++17 编译器、Python 3 和 pthread；SOEM 使用 Linux RAW 网卡后端。HSTR 已内嵌 ST 编译器和已生成的解析器文件，通常无需另装 Bison/Flex。
 
 ```sh

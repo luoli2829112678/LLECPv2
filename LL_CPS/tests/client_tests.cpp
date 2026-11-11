@@ -33,45 +33,129 @@ int main() {
             listen(listener, 2) != 0)
             throw std::runtime_error("Test requires available loopback port 8888");
         std::string serverError;
+        unsigned acceptedConnections = 0, motionCommands = 0;
         std::thread server([&] {
+            Socket peer = static_cast<Socket>(-1);
             try {
-                Socket peer = accept(listener, nullptr, nullptr);
-                std::string data;
-                char b[1024];
-                while (data.find(",;") == std::string::npos) {
-                    int n = recv(peer, b, sizeof(b), 0);
-                    if (n <= 0)
-                        throw std::runtime_error("Incomplete test request");
-                    data.append(b, n);
+                auto acceptPeer = [&] {
+                    fd_set reads;
+                    FD_ZERO(&reads);
+                    FD_SET(listener, &reads);
+                    timeval wait{5, 0};
+                    if (select(static_cast<int>(listener + 1), &reads, nullptr, nullptr, &wait) <= 0)
+                        throw std::runtime_error("Control reconnect timeout");
+                    peer = accept(listener, nullptr, nullptr);
+                    if (peer == static_cast<Socket>(-1))
+                        throw std::runtime_error("Control accept failed");
+                    ++acceptedConnections;
+#ifdef _WIN32
+                    DWORD timeout = 2000;
+#else
+                    timeval timeout{2, 0};
+#endif
+                    setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout),
+                               sizeof(timeout));
+                };
+                auto readRequest = [&] {
+                    std::string data;
+                    char b[1024];
+                    while (data.find(",;") == std::string::npos) {
+                        const int n = recv(peer, b, sizeof(b), 0);
+                        if (n <= 0)
+                            throw std::runtime_error("Control connection was not reused");
+                        data.append(b, n);
+                    }
+                    const auto first = data.find(',');
+                    return LL::Json::parse(LL::Decode64(data.substr(first + 1, data.size() - first - 3)));
+                };
+                auto reply = [&](const LL::Json &request) {
+                    const auto response = LL::CpsResponseFrame(
+                        {{"ok", true}, {"echo", request.at("text")}, {"index", request.at("index")}});
+                    for (std::size_t i = 0; i < response.size(); i += 3)
+                        if (send(peer, response.data() + i,
+                                 static_cast<int>(std::min<std::size_t>(3, response.size() - i)), 0) <= 0)
+                            throw std::runtime_error("Mock response send failed");
+                };
+                acceptPeer();
+                // All 32 polling/command requests must use a single accepted connection.
+                for (int i = 0; i < 32; ++i) {
+                    const auto request = readRequest();
+                    if (request.at("op") != "hello" || request.at("index") != i)
+                        throw std::runtime_error("Wrong persistent request order");
+                    reply(request);
                 }
-                const auto first = data.find(',');
-                auto request = LL::Json::parse(LL::Decode64(data.substr(first + 1, data.size() - first - 3)));
-                if (request.at("op") != "hello")
-                    throw std::runtime_error("Wrong request");
-                const auto response = LL::CpsResponseFrame({{"ok", true}, {"echo", request.at("text")}});
-                for (std::size_t i = 0; i < response.size(); i += 3)
-                    if (send(peer, response.data() + i,
-                             static_cast<int>(std::min<std::size_t>(3, response.size() - i)), 0) <= 0)
-                        throw std::runtime_error("Mock response send failed");
+                const auto motion = readRequest();
+                if (motion.at("op") != "axis.command")
+                    throw std::runtime_error("Missing command failure fixture");
+                ++motionCommands;
+                // Simulate execution followed by loss of the reply. This command must not be replayed.
                 closeSocket(peer);
+                peer = static_cast<Socket>(-1);
+                acceptPeer();
+                const auto recovered = readRequest();
+                if (recovered.at("op") != "hello" || recovered.at("index") != 33)
+                    throw std::runtime_error("Uncertain motion command was replayed");
+                reply(recovered);
+                closeSocket(peer);
+                peer = static_cast<Socket>(-1);
+                // Selecting even the same endpoint explicitly starts a fresh connection.
+                acceptPeer();
+                const auto switched = readRequest();
+                if (switched.at("index") != 34)
+                    throw std::runtime_error("Endpoint generation mismatch");
+                reply(switched);
+                closeSocket(peer);
+                peer = static_cast<Socket>(-1);
             } catch (const std::exception &e) {
                 serverError = e.what();
+                if (peer != static_cast<Socket>(-1))
+                    closeSocket(peer);
             }
         });
-        bool done = false, passed = false;
-        client.Request({{"op", "hello"}, {"text", "comma,semicolon;\n中文"}}, [&](const LL::Json &r) {
-            done = true;
-            passed = r.value("ok", false) && r.at("echo") == "comma,semicolon;\n中文";
-        });
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
-        while (!done && std::chrono::steady_clock::now() < deadline) {
-            client.Drain();
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        bool passed = true;
+        auto roundtrip = [&](const LL::Json &request) {
+            struct Reply {
+                LL::Json result;
+                bool done = false;
+            };
+            auto reply = std::make_shared<Reply>();
+            client.Request(request, [reply](const LL::Json &r) {
+                reply->result = r;
+                reply->done = true;
+            });
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+            while (!reply->done && std::chrono::steady_clock::now() < deadline) {
+                client.Drain();
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            if (!reply->done)
+                return LL::Json{{"ok", false}, {"error", "Mock request timed out"}};
+            return reply->result;
+        };
+        for (int i = 0; i < 32 && passed; ++i) {
+            const auto result =
+                roundtrip({{"op", "hello"}, {"text", "comma,semicolon;\n中文"}, {"index", i}});
+            passed = result.value("ok", false) && result.at("echo") == "comma,semicolon;\n中文" &&
+                     result.at("index") == i;
+        }
+        if (passed) {
+            const auto failed = roundtrip({{"op", "axis.command"}, {"index", 32}});
+            passed = !failed.value("ok", true) && failed.value("transportError", false);
+        }
+        if (passed) {
+            const auto recovered = roundtrip({{"op", "hello"}, {"text", "reconnected"}, {"index", 33}});
+            passed = recovered.value("ok", false) && recovered.at("index") == 33;
+        }
+        if (passed) {
+            client.Endpoint("127.0.0.1");
+            const auto switched =
+                roundtrip({{"op", "hello"}, {"text", "new endpoint session"}, {"index", 34}});
+            passed = switched.value("ok", false) && switched.at("index") == 34;
         }
         server.join();
         closeSocket(listener);
-        if (!serverError.empty() || !done || !passed)
-            throw std::runtime_error("Async TCP roundtrip failed: " + serverError);
+        if (!serverError.empty() || !passed || acceptedConnections != 3 || motionCommands != 1)
+            throw std::runtime_error("Persistent TCP/reconnect/no-replay test failed: " + serverError);
         Socket udp = socket(AF_INET, SOCK_DGRAM, 0);
         addr.sin_port = htons(static_cast<unsigned short>(client.UdpPort()));
         const auto packet = LL::Json{{"type", "LLECP.scope.v1"},
@@ -241,7 +325,8 @@ int main() {
         if (monitored.at("Main.Ready").at("value") != "TRUE" ||
             monitored.at("Main.Message").at("value") != "READY")
             throw std::runtime_error("Typed watch data channel failed");
-        std::cout << "TCP fragmentation/Unicode, UDP compatibility, 100-frame batches, ACK, duplicate "
+        std::cout << "Persistent TCP reuse/reconnect/no command replay, fragmentation/Unicode, UDP "
+                     "compatibility, 100-frame batches, ACK, duplicate "
                      "suppression and reconnect passed\n";
         return 0;
     } catch (const std::exception &e) {

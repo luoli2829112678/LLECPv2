@@ -50,50 +50,20 @@ int LLC_Rbt::AxisDisable(vector<int>AxisList)
     }
     return REC_Successed;
 }
-int LLC_Rbt::AxisReset(vector<int>AxisList)
+int LLC_Rbt::AxisReset(vector<int> axes)
 {
-    for(size_t i = 0;i<AxisList.size();i++)
-    {
-        int nAxisID  = AxisList[i];
-        if(EN_AxisMotionState::motionState_errorstop !=m_vAxis[nAxisID]->Axis_GetAxisMotionState())
-            return REC_Successed;
-
-        bAxisAbsMoveCmd[nAxisID] = false;
-        bAxisRelMoveCmd[nAxisID] = false;
-        bAxisBackAndForthMoveCmd[nAxisID] = false;
-        bAxisContinuousStepMoveCmd[nAxisID] = false;
-        bAxisVelocityMoveCmd[nAxisID] = false;
-
-        m_enAxisAbsMoveFSM[nAxisID] = EN_AxisControlFSM::enAxisControlFSM_Null;
-        m_enAxisRelMoveFSM[nAxisID] = EN_AxisControlFSM::enAxisControlFSM_Null;
-        m_enAxisHomeFSM[nAxisID] = EN_AxisControlFSM::enAxisControlFSM_Null;
-        m_enAxisBackAndForthMoveFSM[nAxisID] = 0;
-        m_enAxisContinuousStepMoveFSM[nAxisID] = 0;
-        m_enAxisVelocityMoveFSM[nAxisID] = 0;
-        
-        bAxisResetCmd[nAxisID] = true;
-    }
-    if(0 == AxisList.size())
-    {
-        for(uint32_t i = 0;i<m_nConfiguredAxisNum;i++)
-        {
-            if(EN_AxisMotionState::motionState_errorstop !=m_vAxis[i]->Axis_GetAxisMotionState())
-                break;
-            bAxisAbsMoveCmd[i] = false;
-            bAxisRelMoveCmd[i] = false;
-            bAxisBackAndForthMoveCmd[i] = false;
-            bAxisContinuousStepMoveCmd[i] = false;
-            bAxisVelocityMoveCmd[i] = false;
-
-            m_enAxisAbsMoveFSM[i] = EN_AxisControlFSM::enAxisControlFSM_Null;
-            m_enAxisRelMoveFSM[i] = EN_AxisControlFSM::enAxisControlFSM_Null;
-            m_enAxisHomeFSM[i] = EN_AxisControlFSM::enAxisControlFSM_Null;
-            m_enAxisBackAndForthMoveFSM[i] = 0;
-            m_enAxisContinuousStepMoveFSM[i] = 0;
-            m_enAxisVelocityMoveFSM[i] = 0;
-            
-            bAxisResetCmd[i] = true;
-        }
+    if(axes.empty())for(std::size_t i=0;i<m_vAxis.size();++i)axes.push_back(static_cast<int>(i));
+    for(const int id:axes)if(id<0||static_cast<std::size_t>(id)>=m_vAxis.size()||!m_vAxis[id])return REC_AxisIDNotExist;
+    for(const int id:axes){
+        auto* axis=m_vAxis[id];
+        if(axis->Axis_GetAxisMotionState()!=motionState_errorstop&&!axis->Axis_GetErrorState()&&!(axis->Axis_GetStatusWord()&8))continue;
+        bAxisAbsMoveCmd[id]=bAxisRelMoveCmd[id]=bAxisBackAndForthMoveCmd[id]=false;
+        bAxisContinuousStepMoveCmd[id]=bAxisVelocityMoveCmd[id]=false;
+        bAxisEnableCmd[id]=bAxisDisableCmd[id]=bAxisHomeCmd[id]=false;
+        m_enAxisAbsMoveFSM[id]=m_enAxisRelMoveFSM[id]=m_enAxisHomeFSM[id]=EN_AxisControlFSM::enAxisControlFSM_Null;
+        m_enAxisEnableFSM[id]=m_enAxisDisableFSM[id]=EN_AxisControlFSM::enAxisControlFSM_Null;
+        m_enAxisBackAndForthMoveFSM[id]=m_enAxisContinuousStepMoveFSM[id]=m_enAxisVelocityMoveFSM[id]=0;
+        bAxisResetCmd[id]=true;
     }
     return REC_Successed;
 }

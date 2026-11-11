@@ -89,6 +89,7 @@ struct DebugLocation
     uint32_t line = 0;        ///< 从 1 开始的 ST 语句起始行号。
     int depth = 0;            ///< 原生 POU 调用深度，用于步过/进入控制。
     bool canStepInto = false; ///< 当前语句是否为允许进入的独立函数/FB 调用。
+    uint64_t pauseCount = 0;  ///< 自复位以来的暂停次数，同一行再次命中也递增。
 };
 
 /// 单任务执行统计；StopProgram/ResetProgram 后清零。

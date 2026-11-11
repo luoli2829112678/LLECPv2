@@ -1,4 +1,5 @@
 #include "Studio.h"
+#include "LL_ScopeFFT.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -84,7 +85,13 @@ void UiRenderCheck() {
     }
     if (frame == 120)
         screenshot("05-axis");
-    if (frame == 125) {
+    if(frame==121){s.axisTab=2;s.pageScroll=0;s.debugPanel=false;}
+    if(frame==124)screenshot("20-axis-motion-layout");
+    if(frame==125){s.axisTab=1;}
+    if(frame==128)screenshot("21-axis-parameters-tab");
+    if(frame==129){s.axisTab=0;}
+    if(frame==132)screenshot("22-axis-mapping-tab");
+    if (frame == 135) {
         s.connected = false;
         s.pendingPoll = false;
         s.status = Json::object();
@@ -110,8 +117,34 @@ void UiRenderCheck() {
         Page("hstr");
         s.source = 4;
     }
+    if(frame==138){
+        const auto& file=s.project["hstr"]["files"][s.source];const auto name=LL::SourceFilename(file);
+        s.editorBreakpoints[s.project.value("id","")+"/"+name].insert(9);
+        s.status={{"plcStatus",3},{"location",{{"file",name},{"line",9},{"pauseCount",1}}}};
+        s.editorFontSize=18;
+    }
+    if(frame==139)
+        screenshot("17-debug-paused");
+    if(frame==140){
+        s.debugPending=true;
+        s.status["plcStatus"]=1;
+        Update();
+    }
+    if(frame==142)
+        screenshot("18-debug-resuming");
+    if(frame==143){
+        s.debugPending=false;
+        s.status["plcStatus"]=3;
+        s.status["location"]["pauseCount"]=2;
+        Update();
+    }
     if (frame == 145)
         screenshot("06-hstr");
+    if (frame == 146) {
+        s.source = 2;
+    }
+    if (frame == 149)
+        screenshot("16-task-editor");
     if (frame == 150) {
         Page("scope");
         s.channels = {"QA.Position", "QA.Velocity"};
@@ -129,7 +162,26 @@ void UiRenderCheck() {
     }
     if (frame == 170)
         screenshot("07-scope");
-    if (frame == 175) {
+    if (frame == 171) {
+        s.scopeCursorA = s.samples[100];
+        s.scopeCursorB = s.samples[300];
+        s.scopeHasA = s.scopeHasB = true;
+        s.scopeCursorChannel = "QA.Position";
+    }
+    if (frame == 175)
+        screenshot("17-scope-cursors");
+    if (frame == 177) {
+        std::vector<double> values;
+        for (const auto &p : s.samples)
+            values.push_back(p.values.at("QA.Position"));
+        s.scopeFft = LL::ScopeFFT(values, 100);
+        s.scopeSpectrumChannel = "QA.Position";
+        s.scopeSpectrum = true;
+    }
+    if (frame == 181)
+        screenshot("18-scope-fft");
+    if (frame == 185) {
+        s.scopeSpectrum = false;
         Page("devices");
     }
     if (frame == 195)
@@ -219,7 +271,30 @@ void UiRenderCheck() {
     }
     if (frame == 370)
         screenshot("15-pdo-invalid-fixture");
-    if (frame == 375) {
+    if(frame==371)s.menu="文件";
+    if(frame==374)screenshot("19-top-menu");
+    if(frame==375){s.menu.clear();Log("Native compilation failed:\nPOUS.c: error: example compiler diagnostic\n完整日志离线渲染夹具");Page("logs");}
+    if(frame==380)screenshot("23-log-viewer");
+    if(frame==381)s.logSearch="error";
+    if(frame==385)screenshot("24-log-search");
+    if(frame==386){
+        Page("scope");
+        s.modal="variables.scope";
+        s.scopePickAxis=true;
+        s.search.clear();s.listScroll=0;
+        s.variables=Json::array({
+            Json{{"name","Axis.0.ActualPosition"},{"displayName","Axis_0 / 实际位置"},{"source","Axis"},{"type","LREAL"},{"master","EtherCAT_1"}},
+            Json{{"name","Axis.0.ActualVelocity"},{"displayName","Axis_0 / 实际速度"},{"source","Axis"},{"type","LREAL"},{"master","EtherCAT_1"}},
+            Json{{"name","Axis.0.StatusWord"},{"displayName","Axis_0 / 状态字"},{"source","Axis"},{"type","LREAL"},{"master","EtherCAT_1"}},
+            Json{{"name","Main.Counter"},{"source","HSTR"},{"type","DINT"}},
+            Json{{"name","Main.ActualPosition"},{"source","HSTR"},{"type","LREAL"}}
+        });
+        Update();
+    }
+    if(frame==395)screenshot("25-scope-pick-axis");
+    if(frame==397){s.scopePickAxis=false;Update();}
+    if(frame==407)screenshot("26-scope-pick-hstr");
+    if (frame == 420) {
         LL::WriteAtomic(
             output / "result.json",
             Json{{"ok", true},

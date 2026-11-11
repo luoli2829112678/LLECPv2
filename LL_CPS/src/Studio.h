@@ -2,6 +2,7 @@
 #include "eui_neo.h"
 #include "ControllerClient.h"
 #include "LL_Pdo.h"
+#include "LL_STEditor.h"
 #include "core/platform/platform.h"
 #include <algorithm>
 #include <chrono>
@@ -14,6 +15,7 @@ using Clock = std::chrono::steady_clock;
 inline const eui::Color bg{.97f, .98f, .99f, 1}, panel{1, 1, 1, 1}, raised{.93f, .95f, .97f, 1},
     line{.79f, .83f, .88f, 1}, fg{.12f, .17f, .23f, 1}, muted{.36f, .42f, .50f, 1}, cyan{0, .35f, .65f, 1},
     red{.73f, .14f, .18f, 1}, green{.08f, .43f, .25f, 1}, amber{.61f, .37f, .05f, 1};
+inline constexpr float MenuStartX=170, MenuTop=11, MenuWidth=60, MenuHeight=32, MenuStep=67;
 struct Studio {
     std::unique_ptr<LL::ProjectRepository> repo;
     std::unique_ptr<LL::ControllerClient> net;
@@ -21,22 +23,44 @@ struct Studio {
                   variables = Json::array(), values = Json::object();
     std::string page = "projects", menu, modal, title, detail, input, ip = "127.0.0.1", search, watchName,
                 watchValue = "0", remote = "firmware.bin", password = "0", target = "10", velocity = "10",
-                acceleration = "100", jerk = "1000", breakLine = "1", interval = "1", kind = "program",
-                mapChoice;
+                acceleration = "100", jerk = "1000", breakLine = "1", interval = "1", windowMs = "10000",
+                kind = "program", mapChoice;
     std::function<void(const std::string &)> accept;
     bool connected = false, busy = false, building = false, dirty = false, debugPanel = true,
          scopeRunning = false, pendingPoll = false, pendingWatch = false;
     int master = -1, slave = -1, axis = -1, source = 0, bottomTab = 0;
     float treeScroll = 0, pageScroll = 0, listScroll = 0;
     float sourceTabScroll = 0;
+    float taskProgramScroll = 0;
     int visibleSourceTab = -1;
+    int axisTab=0;
+    float editorFontSize=14;
+    std::map<std::string,std::set<unsigned>> editorBreakpoints,removedBreakpoints;
+    std::set<std::string> collapsedDeclarations,collapsedImplementations;
+    std::map<std::string,LL::STEditorParts> sourceSections;
+    bool scopePickAxis = true;
+    bool debugPending = false;
     bool savedDebugPanel = true;
+    bool resetFeedbackPending=false;
+    Clock::time_point resetFeedbackDeadline{};
+    bool scopeZoom = false, scopeHover = false, scopeDragging = false, scopeContext = false,
+         scopeSpectrum = false;
+    double scopeX0 = 0, scopeX1 = 1, scopeY0 = 0, scopeY1 = 1, scopeMouseX = 0, scopeMouseY = 0,
+           scopeDownX = 0, scopeDownY = 0;
+    int scopeCursorDrag = -1;
+    Clock::time_point scopeLastClick{};
+    LL::ScopeSample scopeNearest, scopeCursorA, scopeCursorB;
+    std::string scopeNearestChannel, scopeCursorChannel, scopeSpectrumChannel;
+    bool scopeHasA = false, scopeHasB = false;
+    std::vector<std::pair<double, double>> scopeFft;
+
     float fileScroll = 0;
     std::map<std::string, std::string> drafts;
     std::vector<std::string> watches, channels;
-    std::set<std::string> hidden;
+    std::set<std::string> hidden, closedFolders;
     std::vector<LL::ScopeSample> samples;
     std::deque<std::string> log;
+    std::string logSearch;
     Json pdo = Json::object();
     std::string pdoContext;
     std::string operation, operationError;
@@ -121,8 +145,10 @@ void DevicesPage(eui::Ui &, float, float);
 void ScanPage(eui::Ui &, float, float);
 void SlavePage(eui::Ui &, float, float);
 void AxisPage(eui::Ui &, float, float);
+void StartHstr(bool);
 void HstrPage(eui::Ui &, float, float);
 void ScopePage(eui::Ui &, float, float);
+void LogsPage(eui::Ui &, float, float);
 void Bottom(eui::Ui &, float, float);
 void Navigation(eui::Ui &, float, float);
 void MenuOverlay(eui::Ui &);

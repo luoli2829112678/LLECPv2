@@ -15,7 +15,7 @@ static void check(bool condition, const std::string &text) {
     if (!condition)
         throw std::runtime_error(text);
 }
-static Json rpc(const Json &request) {
+static Json rpc(const Json &request,bool expectSuccess=true) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     struct Guard {
         int fd;
@@ -45,7 +45,7 @@ static Json rpc(const Json &request) {
         reply.append(b, n);
     }
     auto result = LL::CpsResponse(reply);
-    check(result.value("ok", false), result.value("error", "RPC failed"));
+    if(expectSuccess)check(result.value("ok", false), result.value("error", "RPC failed"));
     return result;
 }
 int main(int argc, char **argv) {
@@ -75,7 +75,21 @@ int main(int argc, char **argv) {
               "Independent master stop");
         rpc({{"op", LL::CpsOp::MasterStop}, {"master", "EC_B"}});
         const auto xml=R"(<EtherCATInfo><Vendor><Id>1</Id><Name>Test</Name></Vendor><Descriptions><Devices><Device Physics="YY"><Type ProductCode="1" RevisionNo="1">Drive</Type><Name>Drive</Name><RxPdo Sm="2" Mandatory="1"><Index>#x1600</Index><Name>Rx</Name><Entry><Index>#x6040</Index><SubIndex>0</SubIndex><BitLen>16</BitLen><Name>Controlword</Name><DataType>UINT</DataType></Entry><Entry><Index>#x7000</Index><SubIndex>1</SubIndex><BitLen>1</BitLen><Name>Output</Name><DataType>BOOL</DataType></Entry></RxPdo><TxPdo Sm="3" Mandatory="1"><Index>#x1a00</Index><Name>Tx</Name><Entry><Index>#x6041</Index><SubIndex>0</SubIndex><BitLen>16</BitLen><Name>Statusword</Name><DataType>UINT</DataType></Entry></TxPdo></Device></Devices></Descriptions></EtherCATInfo>)";
-        LL::WriteAtomic(root/"ESI"/"test.xml",xml);auto device=LL::DeviceCatalog(xml,"test.xml").at(0);project["masters"][0]["slaves"].push_back(LL::NewSlave(device,1));rpc({{"op",LL::CpsOp::Apply},{"project",project}});rpc({{"op",LL::CpsOp::MasterStart},{"master","EC_A"}});auto pdo=rpc({{"op",LL::CpsOp::PdoWrite},{"master","EC_A"},{"slave",1},{"key",LL::PdoKey(true,0x1600,0)},{"value","12345"}});check(pdo["entries"][0]["value"]=="12345","PDO output write/readback failed");pdo=rpc({{"op",LL::CpsOp::PdoWrite},{"master","EC_A"},{"slave",1},{"key",LL::PdoKey(true,0x1600,1)},{"value","TRUE"}});check(pdo["entries"][0]["value"]=="12345"&&pdo["entries"][1]["value"]=="TRUE","Bit PDO write corrupted adjacent output");check(pdo["entries"][2]["writable"]==false,"TxPDO was not read-only");rpc({{"op",LL::CpsOp::MasterStop},{"master","EC_A"}});project["masters"][0]["slaves"][0]["axes"].push_back(LL::NewAxis(project["masters"][0]["slaves"][0],0));rpc({{"op",LL::CpsOp::Apply},{"project",project}});rpc({{"op",LL::CpsOp::MasterStart},{"master","EC_A"}});status=rpc({{"op",LL::CpsOp::Status}});check(status.at("axes").size()==1&&status["axes"][0]["available"]==true,"Axis state unavailable on simulated master");check(status["masters"][0].contains("sentFrames")&&status["masters"][0].contains("txErrors")&&status["masters"][0].contains("rxErrors"),"Master diagnostics missing");pdo=rpc({{"op",LL::CpsOp::PdoRead},{"master","EC_A"},{"slave",1}});check(pdo["entries"][0]["writable"]==false,"Axis-owned controlword allowed manual PDO writes");rpc({{"op",LL::CpsOp::MasterStop},{"master","EC_A"}});
+        LL::WriteAtomic(root/"ESI"/"test.xml",xml);auto device=LL::DeviceCatalog(xml,"test.xml").at(0);project["masters"][0]["slaves"].push_back(LL::NewSlave(device,1));rpc({{"op",LL::CpsOp::Apply},{"project",project}});rpc({{"op",LL::CpsOp::MasterStart},{"master","EC_A"}});auto pdo=rpc({{"op",LL::CpsOp::PdoWrite},{"master","EC_A"},{"slave",1},{"key",LL::PdoKey(true,0x1600,0)},{"value","12345"}});check(pdo["entries"][0]["value"]=="12345","PDO output write/readback failed");pdo=rpc({{"op",LL::CpsOp::PdoWrite},{"master","EC_A"},{"slave",1},{"key",LL::PdoKey(true,0x1600,1)},{"value","TRUE"}});check(pdo["entries"][0]["value"]=="12345"&&pdo["entries"][1]["value"]=="TRUE","Bit PDO write corrupted adjacent output");check(pdo["entries"][2]["writable"]==false,"TxPDO was not read-only");rpc({{"op",LL::CpsOp::MasterStop},{"master","EC_A"}});project["masters"][0]["slaves"][0]["axes"].push_back(LL::NewAxis(project["masters"][0]["slaves"][0],0));rpc({{"op",LL::CpsOp::Apply},{"project",project}});rpc({{"op",LL::CpsOp::MasterStart},{"master","EC_A"}});status=rpc({{"op",LL::CpsOp::Status}});check(status.at("axes").size()==1&&status["axes"][0]["available"]==true,"Axis state unavailable on simulated master");check(status["masters"][0].contains("sentFrames")&&status["masters"][0].contains("txErrors")&&status["masters"][0].contains("rxErrors"),"Master diagnostics missing");pdo=rpc({{"op",LL::CpsOp::PdoRead},{"master","EC_A"},{"slave",1}});check(pdo["entries"][0]["writable"]==false,"Axis-owned controlword allowed manual PDO writes");
+        rpc({{"op",LL::CpsOp::MasterStart},{"master","EC_B"}});
+        const auto rejected=rpc({{"op",LL::CpsOp::Axis},{"master","EC_A"},{"axis",0},{"command","absolute"},{"position",10},{"velocity",0}},false);
+        check(!rejected.value("ok",true),"Invalid axis request unexpectedly accepted");
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        auto faultState=rpc({{"op",LL::CpsOp::Status}});
+        check(faultState["axes"][0]["error"]==true&&faultState["axes"][0]["controlWord"]==2,"Faulted axis was not held in quick stop");
+        check(faultState["masters"][1]["running"]==true,"Axis fault stopped the other master");
+        const auto blocked=rpc({{"op",LL::CpsOp::Axis},{"master","EC_A"},{"axis",0},{"command","enable"}},false);
+        check(!blocked.value("ok",true),"Fault latch allowed re-enabling without reset");
+        rpc({{"op",LL::CpsOp::Axis},{"master","EC_A"},{"axis",0},{"command","reset"}});
+        for(int attempt=0;attempt<100;++attempt){std::this_thread::sleep_for(std::chrono::milliseconds(10));faultState=rpc({{"op",LL::CpsOp::Status}});if(!faultState["axes"][0].value("error",true))break;}
+        check(!faultState["axes"][0].value("error",true),"Axis fault latch did not clear after reset");
+        rpc({{"op",LL::CpsOp::MasterStop},{"master","EC_B"}});
+        rpc({{"op",LL::CpsOp::MasterStop},{"master","EC_A"}});
         const auto axisVars=rpc({{"op",LL::CpsOp::Variables}}).at("variables");
         bool namedAxis=false;for(const auto& variable:axisVars)if(variable.value("source","")=="Axis"&&variable.value("displayName",std::string{}).find("Axis_0")!=std::string::npos)namedAxis=true;
         check(namedAxis,"Axis picker has no configured axis name");
@@ -115,6 +129,8 @@ int main(int argc, char **argv) {
                 counter = v.at("name");
         check(!counter.empty(), "Counter variable not exported");
         rpc({{"op", LL::CpsOp::Run}, {"debug", false}});
+        const auto repeatedRun=rpc({{"op",LL::CpsOp::Run},{"debug",false}});
+        check(repeatedRun.value("alreadyRunning",false)&&repeatedRun.value("plcStatus",0)==1,"Repeated HSTR run was not idempotent");
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         rpc({{"op", LL::CpsOp::Force}, {"name", counter}, {"value", "42"}});
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

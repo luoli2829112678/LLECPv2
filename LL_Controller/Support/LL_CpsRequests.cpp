@@ -194,7 +194,9 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         return {};
     }
     if (op == LL::CpsOp::Reset) {
+        require(!buildJob_.valid(),"请等待HSTR生成结束后再复位");
         require(!emergency_ && !c->CheckEmergencyStop(), "Clear emergency stop first");
+        if(c->m_pHSTRruntime && c->HSTR_GetApplicationStatus()==static_cast<int>(HSTR::ApplicationStatus::Error))check(c->HSTR_ResetProgram(),"Reset HSTR error");
         for (std::size_t i = 0; i < c->m_vAxis.size(); ++i)
             check(c->AxisReset({static_cast<int>(i)}), "Reset axis");
         c->m_stRobotControlStatus.bStatus_ControllerError = false;
@@ -203,8 +205,9 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         c->m_stRobotControlStatus.bStatus_SlaveDropError = !Connected();
         SetState(c->m_bMasterState ? enCDSState_StandBy : enCDSState_ControllerNotConnect,
                  c->m_bMasterState ? "StandBy" : "ControllerNotConnect");
+        for(const auto& fault:axisFaults_)resettingAxes_.insert(fault.first);
         commandError_.clear();
-        return {};
+        return {{"accepted",true}};
     }
     if (op == LL::CpsOp::SlaveState) {
         auto id = request.at("master").get<std::string>();
@@ -388,7 +391,7 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         buildJob_ = std::async(std::launch::async, [runtime] {
             try {
                 runtime->CompileProgram();
-                return Json{{"succeeded", true}, {"diagnostics", runtime->GetCompilerDiagnostics()}};
+                return Json{{"succeeded", runtime->GetApplicationStatus()==HSTR::ApplicationStatus::Ready}, {"diagnostics", runtime->GetCompilerDiagnostics()},{"error",runtime->GetLastError()}};
             } catch (const std::exception &e) {
                 return Json{{"succeeded", false},
                             {"diagnostics", runtime->GetCompilerDiagnostics()},
@@ -415,9 +418,20 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         return {};
     }
     if (op == LL::CpsOp::Run) {
+        require(!buildJob_.valid(),"HSTR正在生成，请等待生成成功后再运行");
+        require(!buildResult_.is_object()||!buildResult_.value("done",false)||buildResult_.value("succeeded",true),"HSTR生成失败，请修复日志中的编译错误后重新生成，不能运行未编译的应用");
         require(!emergency_ && !c->CheckEmergencyStop(), "Emergency stop is active");
-        check(c->HSTR_RunApplication(request.value("debug", false)), "Run HSTR");
-        return {};
+        require(c->m_pHSTRruntime!=nullptr,"HSTR尚未初始化，请先下载并生成应用");
+        const auto state=c->HSTR_GetApplicationStatus();
+        if(state==static_cast<int>(HSTR::ApplicationStatus::Running))
+            return {{"alreadyRunning",true},{"plcStatus",state},{"application",c->HSTR_GetSelectedApplication()}};
+        require(state==static_cast<int>(HSTR::ApplicationStatus::Ready),
+            "HSTR应用不在就绪状态："+std::to_string(state)+"（0未编译，1运行，2错误，3断点暂停，4就绪）。"+
+            (state==3?std::string("请使用调试继续或先停止应用。"):
+            state==2?std::string("具体错误：")+c->HSTR_GetLastError():std::string("请先成功生成应用。")));
+        const int result=c->HSTR_RunApplication(request.value("debug",false));
+        require(result==REC_Successed,"启动HSTR失败，返回码="+std::to_string(result)+"，应用状态="+std::to_string(c->HSTR_GetApplicationStatus())+"，详情："+c->HSTR_GetLastError());
+        return {{"alreadyRunning",false},{"plcStatus",c->HSTR_GetApplicationStatus()},{"application",c->HSTR_GetSelectedApplication()}};
     }
     if (op == LL::CpsOp::Stop) {
         forces_.clear();
@@ -425,6 +439,7 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         return {};
     }
     if (op == LL::CpsOp::PlcReset) {
+        require(!buildJob_.valid(),"请等待HSTR生成结束后再复位");
         forces_.clear();
         check(c->HSTR_ResetProgram(), "Reset HSTR");
         return {};
@@ -449,7 +464,7 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
               : command == "over"   ? c->HSTR_DebugSingleStep()
                                     : c->HSTR_DebugStepInto(),
               "HSTR debug");
-        return {};
+        return Status();
     }
     if (op == LL::CpsOp::Variables)
         return {{"variables", this->Variables()}};
@@ -543,13 +558,22 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
                 "Axis is not available on a running master");
         require(!emergency_ && !c->CheckEmergencyStop(), "Emergency stop is active");
         const int i = axisIndex_.at(axis);
+        try {
         const auto command = request.at("command").get<std::string>();
+        require(!axisFaults_.count(axis)||command=="reset"||command=="stop","该轴已因故障停止，请先复位后再使能或运动");
         int result = -1;
         const double position = request.value("position", 0.0), velocity = request.value("velocity", 0.0),
                      acc = request.value("acceleration", 0.0), jerk = request.value("jerk", 0.0);
         require(std::isfinite(position) && std::isfinite(velocity) && std::isfinite(acc) &&
                     std::isfinite(jerk),
                 "Motion parameters must be finite");
+        if(command=="absolute"||command=="relative"||command=="home") {
+            auto* target=c->m_vAxis.at(i);
+            require(!target->Axis_GetErrorState(),"轴存在故障，请先在轴页面复位");
+            require(target->Axis_GetAxisMotionState()==motionState_standstill &&
+                    (target->Axis_GetVirtualState()||(target->Axis_GetStatusWord()&0x6f)==0x27),
+                    "轴未使能，请先使能后再运动");
+        }
         if (command == "enable") {
             auto* target=c->m_vAxis.at(i);
             require(!target->Axis_GetErrorState()&&(target->Axis_GetStatusWord()&0x8)==0,"轴存在故障，请先复位并确认故障清除后再使能");
@@ -560,8 +584,10 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
         }
         else if (command == "disable")
             result = c->AxisDisable({i});
-        else if (command == "reset")
+        else if (command == "reset") {
             result = c->AxisReset({i});
+            if(result==REC_Successed)resettingAxes_.insert(axis);
+        }
         else if (command == "stop")
             result = c->AxisStop({i});
         else if (command == "home") {
@@ -615,8 +641,10 @@ Json LL_CpsService::Dispatch(const Json &request, const std::string &peer) {
             result = command == "absolute" ? c->AxisAbsMove(i, position, velocity, acc, acc, jerk)
                                            : c->AxisRelMove(i, position, velocity, acc, acc, jerk);
         }
-        check(result, "Axis command");
+        require(result==REC_Successed,"轴操作 "+command+" 失败："+std::to_string(result)+
+            (result==CEC_SDL_INVALID_AXIS_STATE?"（当前轴状态不允许此操作，请检查使能及运行状态）":""));
         return {{"accepted",true},{"axis",axis},{"master",id}};
+        } catch(const std::exception& error) { FaultAxis(axis,error.what());throw; }
     }
     throw std::runtime_error("Unknown CPS operation: " + op);
 }

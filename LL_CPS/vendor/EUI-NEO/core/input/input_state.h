@@ -319,6 +319,7 @@ inline TextInputEvent consumeTextInput(window::Handle window) {
 inline ScrollEvent consumeScrollInput(window::Handle window) {
     detail::InputQueue& queue = detail::inputQueue(window);
     ScrollEvent scroll{queue.scrollX, queue.scrollY, queue.touchScrollX, queue.touchScrollY};
+    scroll.modifiers=queue.modifiers;
     queue.scrollX = 0.0;
     queue.scrollY = 0.0;
     queue.touchScrollX = 0.0;

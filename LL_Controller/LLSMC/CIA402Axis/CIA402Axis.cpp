@@ -130,6 +130,9 @@ bool CIA402Axis::Axis_CheckError()
 
 int CIA402Axis::Axis_ResetError()
 {
+    if(Axis_PDOErrorCheck())return m_stMirrorPDO.ErrorCode ? m_stMirrorPDO.ErrorCode : -1;
+    m_bError=false;
+    m_nErrorCode=0;
     return AEC_SUCCESSED;
 }
 
@@ -218,8 +221,9 @@ int CIA402Axis::Axis_GetMotionInitialParameters(ST_InterParams& stInitialParamet
 bool CIA402Axis::Axis_PDOErrorCheck()
 {
     bool statuswordCheck = (m_stMirrorPDO.StatusWord & en_StatusWord_f) != 0;
-    bool errorcodeCheck = m_stMirrorPDO.ErrorCode != 0;
-    return statuswordCheck || errorcodeCheck;
+    // 0x603F may retain the last diagnostic after fault acknowledgement.
+    // CiA402 statusword bit 3 is the current drive-fault indication.
+    return statuswordCheck;
 }
 
 void CIA402Axis::AxisMMOPositionSynchronization()

@@ -1,5 +1,6 @@
 #include "CIA402Axis.h"
 #include "Axis/AxisControl/MC_PowerOn.h"
+#include "Axis/AxisControl/MC_Reset.h"
 #include <stdexcept>
 #include <iostream>
 static void check(bool condition, const char *text) {
@@ -9,6 +10,8 @@ static void check(bool condition, const char *text) {
 struct TestAxis : CIA402Axis {
     TestAxis() : CIA402Axis(false) {}
     using CIA402Axis::PDOsynchronization;
+    using CIA402Axis::Axis_ResetError;
+    void SoftwareFault(){m_bError=true;m_nErrorCode=123;Axis_SetAxisState(motionState_errorstop);}
 };
 int main() {
     try {
@@ -51,6 +54,16 @@ int main() {
         axis.PDOsynchronization();
         tick(true);
         check(done, "Enable was not completed from drive feedback");
+        axis.SoftwareFault();image.StatusWord=0x40;image.ErrorCode=0;axis.PDOsynchronization();
+        MC_Reset reset;reset(&axis,false,busy,done,error,code);
+        for(int n=0;n<8&&!done;++n){reset(&axis,true,busy,done,error,code);axis.PDOsynchronization();}
+        check(done&&!error&&!axis.Axis_GetErrorState(),"Software error did not reset without restarting master");
+        axis.SoftwareFault();image.StatusWord=0x40;image.ErrorCode=0x1234;axis.PDOsynchronization();
+        reset(&axis,false,busy,done,error,code);done=false;
+        for(int n=0;n<8&&!done;++n){reset(&axis,true,busy,done,error,code);axis.PDOsynchronization();}
+        check(done&&!error&&!axis.Axis_GetErrorState(),"Latched diagnostic prevented fault reset");
+        image.StatusWord=0x08;image.ErrorCode=0x1234;axis.PDOsynchronization();
+        check(axis.Axis_ResetError()!=0,"Active drive fault was incorrectly cleared");
         std::cout << "PASS: mapped operation mode, position alignment, 0x06/0x07/0x0F and drive-feedback "
                      "completion\n";
         return 0;

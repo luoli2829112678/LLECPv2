@@ -492,6 +492,7 @@ int LLC_Rbt::HSTR_CompileApplication()
 
     // 根据工程登记信息读取GVL、程序、函数和Task文件，编译并加载模块。
     m_pHSTRruntime->CompileProgram();
+    if(m_pHSTRruntime->GetApplicationStatus()!=HSTR::ApplicationStatus::Ready)return -1;
 
     std::printf("[HSTR] Application编译完成：%s\n", appName.c_str());
     return 0;
@@ -515,6 +516,7 @@ int LLC_Rbt::HSTR_RunApplication(bool debug)
     }
 
     const auto status = m_pHSTRruntime->GetApplicationStatus();
+    if (status == HSTR::ApplicationStatus::Running) return REC_Successed;
     if (status != HSTR::ApplicationStatus::Ready)
     {
         std::fprintf(stderr, "[HSTR] 应用未处于就绪状态，当前状态=%d，请先停止或完成编译\n", static_cast<int>(status));
@@ -524,6 +526,7 @@ int LLC_Rbt::HSTR_RunApplication(bool debug)
     // 启动选定应用，不创建周期线程。
     // 后续必须由现有周期入口持续调用m_pHSTRruntime->Cycle()。
     m_pHSTRruntime->ExecuteProgram(debug);
+    m_ApplicationStatus=m_pHSTRruntime->GetApplicationStatus();
 
     std::printf("[HSTR] Application已启动：%s，调试模式=%d\n", appName.c_str(), static_cast<int>(debug));
     return 0;

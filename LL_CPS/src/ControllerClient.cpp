@@ -44,77 +44,114 @@ void Timeout(Socket s, int ms) {
 #endif
 }
 } // namespace
-Json ControllerClient::Call(const std::string &ip, const Json &request) {
-    InitSockets();
-    Socket s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s == static_cast<Socket>(-1))
-        throw std::runtime_error("Cannot create TCP socket");
-    struct Guard {
-        Socket s;
-        ~Guard() {
-            Close(s);
+namespace {
+class ControlConnection {
+  public:
+    ~ControlConnection() {
+        Reset();
+    }
+    void Reset() {
+        if (socket_ != static_cast<Socket>(-1))
+            Close(socket_);
+        socket_ = static_cast<Socket>(-1);
+        ip_.clear();
+        response_.clear();
+    }
+    Json Call(const std::string &ip, const Json &request) {
+        try {
+            if (ip_ != ip)
+                Reset();
+            if (socket_ == static_cast<Socket>(-1))
+                Connect(ip);
+            const auto frame = CpsRequestFrame(request);
+            std::size_t sent = 0;
+            while (sent < frame.size()) {
+#ifdef _WIN32
+                const int n = send(socket_, frame.data() + sent, static_cast<int>(frame.size() - sent), 0);
+#else
+                const int n = send(socket_, frame.data() + sent, frame.size() - sent, MSG_NOSIGNAL);
+#endif
+                if (n <= 0)
+                    throw std::runtime_error("TCP 发送失败");
+                sent += n;
+            }
+            char buffer[8192];
+            auto end = response_.find(",;");
+            while (end == std::string::npos) {
+                const int n = recv(socket_, buffer, sizeof(buffer), 0);
+                if (n <= 0)
+                    throw std::runtime_error("控制连接中断或响应超时；请求可能已执行，请确认控制器状态");
+                response_.append(buffer, n);
+                if (response_.size() > 2 * 1024 * 1024)
+                    throw std::runtime_error("响应过大");
+                end = response_.find(",;");
+            }
+            auto result = CpsResponse(response_.substr(0, end + 2));
+            response_.erase(0, end + 2);
+            return result;
+        } catch (...) {
+            // A failed response does not prove the command was not executed. Never replay it.
+            Reset();
+            throw;
         }
-    } guard{s};
-    Timeout(s, 30000);
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(8888);
-    if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1)
-        throw std::runtime_error("请输入有效的 IPv4 地址");
-#ifdef _WIN32
-    u_long nb = 1;
-    ioctlsocket(s, FIONBIO, &nb);
-#else
-    int flags = fcntl(s, F_GETFL, 0);
-    fcntl(s, F_SETFL, flags | O_NONBLOCK);
-#endif
-    int rc = connect(s, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
-    if (rc != 0) {
-        fd_set writes;
-        FD_ZERO(&writes);
-        FD_SET(s, &writes);
-        timeval wait{3, 0};
-        if (select(static_cast<int>(s + 1), nullptr, &writes, nullptr, &wait) <= 0)
-            throw std::runtime_error("连接控制器超时");
-        int error = 0;
-#ifdef _WIN32
-        int len = sizeof(error);
-#else
-        socklen_t len = sizeof(error);
-#endif
-        getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char *>(&error), &len);
-        if (error)
-            throw std::runtime_error("无法连接控制器 8888 端口");
     }
+
+  private:
+    void Connect(const std::string &ip) {
+        InitSockets();
+        socket_ = socket(AF_INET, SOCK_STREAM, 0);
+        if (socket_ == static_cast<Socket>(-1))
+            throw std::runtime_error("Cannot create TCP socket");
+        const Socket s = socket_;
+        Timeout(s, 30000);
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(8888);
+        if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1)
+            throw std::runtime_error("请输入有效的 IPv4 地址");
 #ifdef _WIN32
-    nb = 0;
-    ioctlsocket(s, FIONBIO, &nb);
+        u_long nb = 1;
+        ioctlsocket(s, FIONBIO, &nb);
 #else
-    fcntl(s, F_SETFL, flags);
+        int flags = fcntl(s, F_GETFL, 0);
+        fcntl(s, F_SETFL, flags | O_NONBLOCK);
 #endif
-    const auto frame = CpsRequestFrame(request);
-    std::size_t sent = 0;
-    while (sent < frame.size()) {
+        int rc = connect(s, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+        if (rc != 0) {
+            fd_set writes;
+            FD_ZERO(&writes);
+            FD_SET(s, &writes);
+            timeval wait{3, 0};
+            if (select(static_cast<int>(s + 1), nullptr, &writes, nullptr, &wait) <= 0)
+                throw std::runtime_error("连接控制器超时");
+            int error = 0;
 #ifdef _WIN32
-        const int n = send(s, frame.data() + sent, static_cast<int>(frame.size() - sent), 0);
+            int len = sizeof(error);
 #else
-        const int n = send(s, frame.data() + sent, frame.size() - sent, MSG_NOSIGNAL);
+            socklen_t len = sizeof(error);
 #endif
-        if (n <= 0)
-            throw std::runtime_error("TCP 发送失败");
-        sent += n;
+            getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char *>(&error), &len);
+            if (error)
+                throw std::runtime_error("无法连接控制器 8888 端口");
+        }
+#ifdef _WIN32
+        nb = 0;
+        ioctlsocket(s, FIONBIO, &nb);
+#else
+        fcntl(s, F_SETFL, flags);
+#endif
+        int keepAlive = 1;
+        setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char *>(&keepAlive),
+                   sizeof(keepAlive));
+        ip_ = ip;
     }
-    std::string response;
-    char buffer[8192];
-    while (response.find(",;") == std::string::npos) {
-        int n = recv(s, buffer, sizeof(buffer), 0);
-        if (n <= 0)
-            throw std::runtime_error("控制器未返回完整响应");
-        response.append(buffer, n);
-        if (response.size() > 2 * 1024 * 1024)
-            throw std::runtime_error("响应过大");
-    }
-    return CpsResponse(response);
+    Socket socket_ = static_cast<Socket>(-1);
+    std::string ip_, response_;
+};
+} // namespace
+Json ControllerClient::Call(const std::string &ip, const Json &request) {
+    ControlConnection connection;
+    return connection.Call(ip, request);
 }
 ControllerClient::ControllerClient() {
     InitSockets();
@@ -155,8 +192,10 @@ void ControllerClient::Endpoint(std::string ip) {
     StopDataStreams();
     std::lock_guard<std::mutex> l(mutex_);
     ip_ = std::move(ip);
+    ++endpointGeneration_;
     samples_.clear();
-    dataLatest_.clear();dataErrors_.clear();
+    dataLatest_.clear();
+    dataErrors_.clear();
 }
 std::string ControllerClient::Endpoint() const {
     std::lock_guard<std::mutex> l(mutex_);
@@ -166,10 +205,12 @@ void ControllerClient::Request(Json request, Callback callback) {
     std::lock_guard<std::mutex> l(mutex_);
     if (jobs_.size() > 32)
         throw std::runtime_error("通信队列繁忙");
-    jobs_.push_back({ip_, std::move(request), std::move(callback)});
+    jobs_.push_back({ip_, std::move(request), std::move(callback), endpointGeneration_});
     cv_.notify_one();
 }
 void ControllerClient::Work() {
+    ControlConnection connection;
+    std::uint64_t generation = 0;
     while (!stop_) {
         Job job;
         {
@@ -182,7 +223,11 @@ void ControllerClient::Work() {
         }
         Json result;
         try {
-            result = Call(job.ip, job.request);
+            if (generation != job.generation) {
+                connection.Reset();
+                generation = job.generation;
+            }
+            result = connection.Call(job.ip, job.request);
         } catch (const std::exception &e) {
             result = {{"ok", false}, {"error", e.what()}, {"transportError", true}};
         }
